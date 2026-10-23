@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,40 @@ ALLOWED_FORMATS = {
 }
 
 
-async def upload_incident_photos(
+def _sanitize_image(content: bytes, image_format: str) -> bytes:
+    """Re-encode an image without its metadata.
+
+    Embedded EXIF/XMP data can expose a citizen's exact location, device and
+    capture time, and re-encoding also discards any data appended to the file.
+    GPS has already been read from the original bytes at this point. The ICC
+    profile is kept because it affects colour, not privacy.
+    """
+    with Image.open(BytesIO(content)) as image:
+        # Bake the EXIF orientation into the pixels so the photo still
+        # displays upright after the orientation tag is dropped.
+        oriented = ImageOps.exif_transpose(image)
+        icc_profile = image.info.get("icc_profile")
+
+        save_kwargs: dict = {}
+        if icc_profile:
+            save_kwargs["icc_profile"] = icc_profile
+
+        if image_format == "JPEG":
+            if oriented.mode not in ("RGB", "L"):
+                oriented = oriented.convert("RGB")
+            save_kwargs.update(quality=90, optimize=True)
+        elif image_format == "WEBP":
+            save_kwargs.update(quality=90)
+        elif image_format == "PNG":
+            save_kwargs.update(optimize=True)
+
+        output = BytesIO()
+        # No exif= argument: metadata is intentionally not carried over.
+        oriented.save(output, format=image_format, **save_kwargs)
+        return output.getvalue()
+
+
+def upload_incident_photos(
     db: Session,
     incident_id: int,
     reporter_id: int,
@@ -65,10 +98,11 @@ async def upload_incident_photos(
     written_paths: list[Path] = []
     photo_records: list[IncidentPhoto] = []
     committed = False
+    total_bytes = 0
 
     try:
         for upload in files:
-            content = await upload.read(settings.INCIDENT_PHOTO_MAX_SIZE_BYTES + 1)
+            content = upload.file.read(settings.INCIDENT_PHOTO_MAX_SIZE_BYTES + 1)
 
             if not content:
                 raise HTTPException(
@@ -82,15 +116,37 @@ async def upload_incident_photos(
                     detail="Each photo must be 10 MB or smaller.",
                 )
 
+            total_bytes += len(content)
+            if total_bytes > settings.INCIDENT_PHOTO_MAX_TOTAL_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="The combined size of the photos is too large.",
+                )
+
             # Validate actual image content, not the supplied filename.
             try:
                 with Image.open(BytesIO(content)) as image:
                     image_format = image.format
+
+                    # Reject oversized bitmaps from the header alone, before
+                    # any pixel data is decoded.
+                    if image.width * image.height > settings.INCIDENT_PHOTO_MAX_PIXELS:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="An uploaded photo has dimensions that are too large.",
+                        )
+
                     image.verify()
+            except Image.DecompressionBombError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="An uploaded photo has dimensions that are too large.",
+                ) from exc
             except (
                 UnidentifiedImageError,
                 OSError,
                 ValueError,
+                SyntaxError,  # Pillow raises this for some corrupt PNGs.
             ) as exc:
                 raise HTTPException(
                     status_code=422,
@@ -103,7 +159,10 @@ async def upload_incident_photos(
                     detail="Only JPEG, PNG and WEBP photos are allowed.",
                 )
 
-            # Require valid embedded EXIF GPS coordinates.
+            # Require valid embedded EXIF GPS coordinates. This is read from
+            # the original bytes; it is client-supplied metadata and can be
+            # forged, so it is a consistency check rather than proof of
+            # location.
             try:
                 photo_lat, photo_lon = extract_photo_gps(content)
             except ValueError as exc:
@@ -131,12 +190,26 @@ async def upload_incident_photos(
                     ),
                 )
 
+            # Store a metadata-free re-encoded copy, never the original bytes.
+            try:
+                stored_content = _sanitize_image(content, image_format)
+            except Image.DecompressionBombError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="An uploaded photo has dimensions that are too large.",
+                ) from exc
+            except (OSError, ValueError, SyntaxError) as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="An uploaded file is not a valid image.",
+                ) from exc
+
             storage_key = f"{uuid4().hex}.{image_format.lower()}"
             destination = storage_dir / storage_key
 
             # Exclusive creation prevents overwriting an existing file.
             with destination.open("xb") as output:
-                output.write(content)
+                output.write(stored_content)
 
             written_paths.append(destination)
 
@@ -148,7 +221,7 @@ async def upload_incident_photos(
                         :255
                     ],
                     content_type=ALLOWED_FORMATS[image_format],
-                    size_bytes=len(content),
+                    size_bytes=len(stored_content),
                 )
             )
 
@@ -175,4 +248,4 @@ async def upload_incident_photos(
 
     finally:
         for upload in files:
-            await upload.close()
+            upload.file.close()

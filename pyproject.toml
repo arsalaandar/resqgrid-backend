@@ -17,3 +17,9 @@ ignore = ["B008"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Loads .env (including TEST_DATABASE_URL) so tests do not need a manual
+# $env:TEST_DATABASE_URL in every new shell. Requires pytest-dotenv.
+env_files = [".env"]

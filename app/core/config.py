@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     OTP_HMAC_SECRET: str = Field(min_length=32)
     OTP_TTL_SECONDS: int = 300
     OTP_MAX_ATTEMPTS: int = 5
+    # Per-phone send limits, enforced in the OTP service (not just per IP).
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_REQUESTS_PER_HOUR: int = 5
+    OTP_MAX_REQUESTS_PER_DAY: int = 10
 
     JWT_SECRET_KEY: str = Field(min_length=32)
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15

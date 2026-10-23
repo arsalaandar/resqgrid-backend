@@ -1,0 +1,19 @@
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "alembic/versions",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

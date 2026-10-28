@@ -238,8 +238,11 @@ def outside_jurisdiction_incident(db_session, another_citizen):
 
 @pytest.mark.asyncio
 async def test_official_can_view_incident_in_assigned_jurisdiction(
-    api_client, official, citizen_incident
+    api_client, db_session, official, citizen_incident
 ):
+    # Officials only see incidents that have actually been reported.
+    citizen_incident.status = "REPORTED"
+    db_session.flush()
     token = create_access_token(official.id)
 
     response = await api_client.get(
@@ -268,10 +271,13 @@ async def test_official_cannot_view_incident_outside_jurisdiction(
 @pytest.mark.asyncio
 async def test_official_assigned_endpoint_returns_only_own_jurisdiction(
     api_client,
+    db_session,
     official,
     citizen_incident,
     outside_jurisdiction_incident,
 ):
+    citizen_incident.status = "REPORTED"
+    db_session.flush()
     token = create_access_token(official.id)
 
     response = await api_client.get(

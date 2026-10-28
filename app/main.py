@@ -1,6 +1,8 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -27,6 +29,29 @@ app.add_exception_handler(
     RateLimitExceeded,
     _rate_limit_exceeded_handler,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    request: Request,
+    exc: RequestValidationError,
+):
+    """Return 422 details without echoing the submitted values.
+
+    FastAPI's default response includes each error's ``input``. That would
+    send passwords and OTPs back to the client (and into proxy logs), and a
+    NaN inside the input cannot be serialised, which turned a validation
+    error into a 500.
+    """
+    errors = [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": error.get("msg", "Invalid value."),
+            "type": error.get("type", "value_error"),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.get("/")

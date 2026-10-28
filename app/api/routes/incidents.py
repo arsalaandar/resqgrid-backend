@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
@@ -19,6 +19,15 @@ router = APIRouter(
     prefix="/api/v1/incidents",
     tags=["Incidents"],
 )
+
+
+def _visible_to_official(user: User):
+    """Officials see submitted incidents, plus any draft they wrote themselves.
+
+    A DRAFT has no photos and has not been reported yet, so another person's
+    draft is not something a field official should see or act on.
+    """
+    return or_(Incident.status != "DRAFT", Incident.reporter_id == user.id)
 
 
 @router.post(
@@ -97,6 +106,7 @@ def get_assigned_incidents(
         .where(
             func.lower(Incident.district) == current_user.assigned_district.casefold(),
             func.lower(Incident.tehsil) == current_user.assigned_tehsil.casefold(),
+            _visible_to_official(current_user),
         )
         .order_by(
             Incident.created_at.desc(),
@@ -164,6 +174,7 @@ def get_incident(
         statement = statement.where(
             func.lower(Incident.district) == current_user.assigned_district.casefold(),
             func.lower(Incident.tehsil) == current_user.assigned_tehsil.casefold(),
+            _visible_to_official(current_user),
         )
 
     elif role not in {"ADMIN", "SUPER_ADMIN"}:

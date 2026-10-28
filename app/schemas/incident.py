@@ -1,4 +1,5 @@
-from datetime import datetime
+import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import (
@@ -15,6 +16,14 @@ from app.core.incident_options import (
     INCIDENT_CATEGORIES,
     INCIDENT_SEVERITY_LEVELS,
 )
+
+
+# Each count column is a 32-bit integer; larger values would fail at insert.
+MAX_COUNT = 10_000_000
+# Free-form departmental answers are stored as JSON, so bound their size.
+MAX_DEPARTMENTAL_DETAILS_BYTES = 20_000
+# Allow for phone clocks that run slightly ahead of the server.
+MAX_FUTURE_SKEW = timedelta(minutes=5)
 
 
 class DepartmentalDetails(BaseModel):
@@ -34,6 +43,20 @@ class DepartmentalDetails(BaseModel):
     evacuation: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def limit_total_size(self):
+        try:
+            # allow_nan=False rejects NaN/Infinity, which PostgreSQL JSONB
+            # cannot store and which would otherwise surface as a 500.
+            encoded = json.dumps(self.model_dump(), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Departmental details must be valid JSON.") from exc
+
+        if len(encoded.encode("utf-8")) > MAX_DEPARTMENTAL_DETAILS_BYTES:
+            raise ValueError("Departmental details are too large.")
+
+        return self
 
 
 class IncidentCreate(BaseModel):
@@ -56,13 +79,13 @@ class IncidentCreate(BaseModel):
     damage_situation: str
     severity_level: str
 
-    casualties: int = Field(default=0, ge=0)
-    people_missing: int = Field(default=0, ge=0)
-    minor_injuries: int = Field(default=0, ge=0)
-    major_injuries: int = Field(default=0, ge=0)
-    houses_completely_damaged: int = Field(default=0, ge=0)
-    houses_partially_damaged: int = Field(default=0, ge=0)
-    roads_damaged_over_50_percent: int = Field(default=0, ge=0)
+    casualties: int = Field(default=0, ge=0, le=MAX_COUNT)
+    people_missing: int = Field(default=0, ge=0, le=MAX_COUNT)
+    minor_injuries: int = Field(default=0, ge=0, le=MAX_COUNT)
+    major_injuries: int = Field(default=0, ge=0, le=MAX_COUNT)
+    houses_completely_damaged: int = Field(default=0, ge=0, le=MAX_COUNT)
+    houses_partially_damaged: int = Field(default=0, ge=0, le=MAX_COUNT)
+    roads_damaged_over_50_percent: int = Field(default=0, ge=0, le=MAX_COUNT)
 
     additional_remarks: str = Field(min_length=1, max_length=5000)
     voice_message_required: bool = False
@@ -74,6 +97,15 @@ class IncidentCreate(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("incident_datetime")
+    @classmethod
+    def validate_incident_datetime(cls, value: datetime) -> datetime:
+        # Naive timestamps carry no offset, so they cannot be compared safely;
+        # only timezone-aware values are checked.
+        if value.tzinfo is not None and value > datetime.now(UTC) + MAX_FUTURE_SKEW:
+            raise ValueError("Incident time cannot be in the future.")
+        return value
 
     @field_validator("incident_category")
     @classmethod

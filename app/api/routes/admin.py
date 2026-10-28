@@ -150,13 +150,15 @@ def list_state_incidents(
         filters.append(Incident.status == status_filter.strip().upper())
 
     if district:
-        filters.append(Incident.district.ilike(district.strip()))
+        filters.append(func.lower(Incident.district) == district.strip().casefold())
 
     if tehsil:
-        filters.append(Incident.tehsil.ilike(tehsil.strip()))
+        filters.append(func.lower(Incident.tehsil) == tehsil.strip().casefold())
 
     if category:
-        filters.append(Incident.incident_category.ilike(category.strip()))
+        filters.append(
+            func.lower(Incident.incident_category) == category.strip().casefold()
+        )
 
     if date_from:
         filters.append(Incident.created_at >= date_from)

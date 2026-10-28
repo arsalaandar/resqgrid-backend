@@ -1,10 +1,11 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token
 from app.db.dependencies import get_db
 from app.schemas.token import (
@@ -25,7 +26,9 @@ router = APIRouter(
 
 
 @router.post("/refresh", response_model=TokenRefreshResponse)
+@limiter.limit("30/minute")
 def refresh_access_token(
+    request: Request,
     payload: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ) -> TokenRefreshResponse:
@@ -56,7 +59,9 @@ def refresh_access_token(
 
 
 @router.post("/logout", response_model=LogoutResponse)
+@limiter.limit("30/minute")
 def logout(
+    request: Request,
     payload: LogoutRequest,
     db: Session = Depends(get_db),
 ) -> LogoutResponse:

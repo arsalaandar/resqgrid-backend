@@ -8,8 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_authenticated_user
 from app.core.config import settings
-from app.core.passwords import hash_password, verify_password
+from app.core.passwords import (
+    hash_password,
+    verify_password,
+    verify_password_timing_safe,
+)
 from app.core.rate_limit import limiter
+from app.core.roles import STAFF_ROLES
 from app.core.security import create_access_token
 from app.db.dependencies import get_db
 from app.models.user import User
@@ -28,8 +33,6 @@ router = APIRouter(
     tags=["Staff Authentication"],
 )
 
-ALLOWED_ROLES = {"SUPER_ADMIN", "ADMIN", "OFFICIAL"}
-
 
 @router.post(
     "/login",
@@ -45,22 +48,33 @@ def staff_login(
         select(User).where(User.phone == payload.phone)
     )
 
+    # Always perform one password verification, even for unknown phones, so
+    # response time does not reveal which numbers are staff accounts.
+    password_ok, upgraded_hash = verify_password_timing_safe(
+        payload.password,
+        account.password_hash if account else None,
+    )
+
     # Use the same public error for unknown users and wrong passwords.
     if (
         account is None
-        or account.role.upper() not in ALLOWED_ROLES
+        or not password_ok
+        or account.role.upper() not in STAFF_ROLES
         or not account.is_active
-        or not account.password_hash
-        or not verify_password(
-            payload.password,
-            account.password_hash,
-        )
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid phone number or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if upgraded_hash:
+        # Transparently move the stored hash to current Argon2 parameters.
+        try:
+            account.password_hash = upgraded_hash
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
 
     access_token = create_access_token(
         user_id=account.id,
@@ -95,12 +109,14 @@ def staff_login(
     "/change-password",
     response_model=PasswordChangeResponse,
 )
+@limiter.limit("5/minute")
 def change_staff_password(
+    request: Request,
     payload: PasswordChangeRequest,
     current_user: User = Depends(get_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role.upper() not in ALLOWED_ROLES:
+    if current_user.role.upper() not in STAFF_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is for staff accounts only.",

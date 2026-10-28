@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
@@ -9,6 +9,7 @@ from app.core.incident_options import (
     INCIDENT_CATEGORIES,
     INCIDENT_SEVERITY_LEVELS,
 )
+from app.core.roles import ADMIN_ROLES, Role
 from app.db.dependencies import get_db
 from app.models.incident import Incident
 from app.models.user import User
@@ -21,6 +22,15 @@ router = APIRouter(
 )
 
 
+def _visible_to_official(user: User):
+    """Officials see submitted incidents, plus any draft they wrote themselves.
+
+    A DRAFT has no photos and has not been reported yet, so another person's
+    draft is not something a field official should see or act on.
+    """
+    return or_(Incident.status != "DRAFT", Incident.reporter_id == user.id)
+
+
 @router.post(
     "",
     response_model=IncidentResponse,
@@ -31,7 +41,7 @@ def report_incident(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role.upper() == "OFFICIAL":
+    if current_user.role.upper() == Role.OFFICIAL:
         if not current_user.assigned_district or not current_user.assigned_tehsil:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -80,7 +90,7 @@ def get_assigned_incidents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role.upper() != "OFFICIAL":
+    if current_user.role.upper() != Role.OFFICIAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is for field officials only.",
@@ -97,6 +107,7 @@ def get_assigned_incidents(
         .where(
             func.lower(Incident.district) == current_user.assigned_district.casefold(),
             func.lower(Incident.tehsil) == current_user.assigned_tehsil.casefold(),
+            _visible_to_official(current_user),
         )
         .order_by(
             Incident.created_at.desc(),
@@ -151,10 +162,10 @@ def get_incident(
 
     statement = select(Incident).where(Incident.id == incident_id)
 
-    if role == "CITIZEN":
+    if role == Role.CITIZEN:
         statement = statement.where(Incident.reporter_id == current_user.id)
 
-    elif role == "OFFICIAL":
+    elif role == Role.OFFICIAL:
         if not current_user.assigned_district or not current_user.assigned_tehsil:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -164,9 +175,10 @@ def get_incident(
         statement = statement.where(
             func.lower(Incident.district) == current_user.assigned_district.casefold(),
             func.lower(Incident.tehsil) == current_user.assigned_tehsil.casefold(),
+            _visible_to_official(current_user),
         )
 
-    elif role not in {"ADMIN", "SUPER_ADMIN"}:
+    elif role not in ADMIN_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this incident.",

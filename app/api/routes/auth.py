@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.rate_limit import limiter
+from app.core.roles import Role
 from app.core.security import create_access_token
 from app.db.dependencies import get_db
 from app.models.user import User
@@ -77,7 +78,7 @@ def verify_citizen_otp(
 
     if account is not None:
         # Citizen OTP login must never grant access to an official/admin.
-        if account.role.upper() != "CITIZEN":
+        if account.role.upper() != Role.CITIZEN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This account cannot use citizen login.",
@@ -106,7 +107,7 @@ def verify_citizen_otp(
         # 3. New accounts always receive CITIZEN from the server.
         account = User(
             phone=payload.phone,
-            role="CITIZEN",
+            role=Role.CITIZEN.value,
             is_active=True,
             is_verified=True,
         )
@@ -132,7 +133,7 @@ def verify_citizen_otp(
                     detail="Account creation conflict. Request a new OTP.",
                 ) from None
 
-            if account.role.upper() != "CITIZEN":
+            if account.role.upper() != Role.CITIZEN:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="This account cannot use citizen login.",

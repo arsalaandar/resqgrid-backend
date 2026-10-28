@@ -30,6 +30,30 @@ def _unauthorized() -> HTTPException:
     )
 
 
+def _revoke_family(db: Session, family_id: str, now: datetime) -> None:
+    """Revoke every still-active token in one session family."""
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.family_id == family_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+
+
+def _revoke_all_user_sessions(db: Session, user_id: int, now: datetime) -> None:
+    """Revoke every still-active refresh token the user holds, on any device."""
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+
+
 def create_refresh_session(db: Session, user: User) -> tuple[str, datetime]:
     """Create a refresh-token session for a successfully authenticated user."""
     now = datetime.now(UTC)
@@ -81,19 +105,12 @@ def rotate_refresh_token(
 
         # A previously rotated or revoked token may indicate token theft.
         if record.revoked_at is not None:
-            db.execute(
-                update(RefreshToken)
-                .where(
-                    RefreshToken.family_id == record.family_id,
-                    RefreshToken.revoked_at.is_(None),
-                )
-                .values(revoked_at=now)
-            )
+            _revoke_family(db, record.family_id, now)
             db.commit()
             raise _unauthorized()
 
         if record.expires_at <= now or record.session_expires_at <= now:
-            record.revoked_at = now
+            _revoke_family(db, record.family_id, now)
             db.commit()
             raise _unauthorized()
 
@@ -103,12 +120,18 @@ def rotate_refresh_token(
             .with_for_update()
         )
 
+        if user is None:
+            _revoke_family(db, record.family_id, now)
+            db.commit()
+            raise _unauthorized()
+
         if (
-            user is None
-            or not user.is_active
+            not user.is_active
             or user.token_version != record.token_version
         ):
-            record.revoked_at = now
+            # The account was deactivated or its credentials changed. Every
+            # session the user holds is now untrustworthy, not just this one.
+            _revoke_all_user_sessions(db, user.id, now)
             db.commit()
             raise _unauthorized()
 
@@ -158,14 +181,7 @@ def revoke_refresh_token(db: Session, raw_token: str) -> None:
         if record is None:
             return
 
-        db.execute(
-            update(RefreshToken)
-            .where(
-                RefreshToken.family_id == record.family_id,
-                RefreshToken.revoked_at.is_(None),
-            )
-            .values(revoked_at=now)
-        )
+        _revoke_family(db, record.family_id, now)
         db.commit()
     except Exception:
         db.rollback()

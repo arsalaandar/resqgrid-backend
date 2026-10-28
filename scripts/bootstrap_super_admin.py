@@ -7,9 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.passwords import hash_password
+from app.core.roles import Role
 from app.db.database import SessionLocal
 from app.models.user import User
-
 
 PHONE_PATTERN = re.compile(r"^\+[1-9]\d{7,14}$")
 
@@ -21,7 +21,10 @@ def main() -> None:
     phone = input("Super Admin phone number (international format): ").strip()
 
     if not PHONE_PATTERN.fullmatch(phone):
-        print("Invalid phone number format. Use international format, e.g. +91 followed by your number.")
+        print(
+            "Invalid phone number format. "
+            "Use international format, e.g. +91 followed by your number."
+        )
         sys.exit(1)
 
     password = getpass.getpass("Choose a strong password: ")
@@ -44,7 +47,7 @@ def main() -> None:
     try:
         existing_super_admin = db.scalar(
             select(User.id).where(
-                func.upper(User.role) == "SUPER_ADMIN"
+                func.upper(User.role) == Role.SUPER_ADMIN.value
             ).limit(1)
         )
 
@@ -64,7 +67,7 @@ def main() -> None:
         account = User(
             phone=phone,
             password_hash=hash_password(password),
-            role="SUPER_ADMIN",
+            role=Role.SUPER_ADMIN.value,
             designation="State Administrator",
             department="Disaster Management",
             assigned_district=None,

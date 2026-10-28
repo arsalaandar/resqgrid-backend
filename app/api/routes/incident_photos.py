@@ -34,13 +34,15 @@ class IncidentPhotoUploadResponse(BaseModel):
     response_model=IncidentPhotoUploadResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_photos(
+def upload_photos(
     incident_id: int,
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    photos = await upload_incident_photos(
+    # A plain (sync) route runs in FastAPI's threadpool, so image decoding,
+    # file writes and blocking database calls do not stall the event loop.
+    photos = upload_incident_photos(
         db=db,
         incident_id=incident_id,
         reporter_id=current_user.id,

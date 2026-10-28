@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     OTP_HMAC_SECRET: str = Field(min_length=32)
     OTP_TTL_SECONDS: int = 300
     OTP_MAX_ATTEMPTS: int = 5
+    # Per-phone send limits, enforced in the OTP service (not just per IP).
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_REQUESTS_PER_HOUR: int = 5
+    OTP_MAX_REQUESTS_PER_DAY: int = 10
 
     JWT_SECRET_KEY: str = Field(min_length=32)
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -28,8 +32,16 @@ class Settings(BaseSettings):
     # Use a shared store such as redis://host:6379/0 for multiple workers.
     RATE_LIMIT_STORAGE_URI: str = "memory://"
 
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+
     INCIDENT_PHOTO_STORAGE_DIR: str = "storage/incident_photos"
     INCIDENT_PHOTO_MAX_SIZE_BYTES: int = 10 * 1024 * 1024
+    # Total accepted bytes per upload request, across all files.
+    INCIDENT_PHOTO_MAX_TOTAL_BYTES: int = 60 * 1024 * 1024
+    # Decoded pixel cap. A small, highly compressed file can expand to a huge
+    # bitmap, so size limits alone do not bound memory use.
+    INCIDENT_PHOTO_MAX_PIXELS: int = 40_000_000
     INCIDENT_PHOTO_MIN_COUNT: int = 3
     INCIDENT_PHOTO_MAX_COUNT: int = 10
     INCIDENT_PHOTO_MAX_DISTANCE_METERS: float = 100.0

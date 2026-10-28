@@ -3,6 +3,7 @@ import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -24,7 +25,38 @@ def _create_verifier(
     ).hexdigest()
 
 
-def request_otp(db: Session, phone: str) -> None:
+def _is_throttled(db: Session, phone: str, now: datetime) -> bool:
+    """Return True when this phone has requested too many OTPs recently."""
+    day_ago = now - timedelta(days=1)
+    hour_ago = now - timedelta(hours=1)
+
+    created_times = db.scalars(
+        select(OTPChallenge.created_at).where(
+            OTPChallenge.phone == phone,
+            OTPChallenge.created_at >= day_ago,
+        )
+    ).all()
+
+    if not created_times:
+        return False
+
+    newest = max(created_times)
+    in_last_hour = sum(1 for created in created_times if created >= hour_ago)
+
+    return (
+        now - newest < timedelta(seconds=settings.OTP_RESEND_COOLDOWN_SECONDS)
+        or in_last_hour >= settings.OTP_MAX_REQUESTS_PER_HOUR
+        or len(created_times) >= settings.OTP_MAX_REQUESTS_PER_DAY
+    )
+
+
+def request_otp(db: Session, phone: str) -> bool:
+    """Create and send an OTP unless this phone is being throttled.
+
+    Returns True when an OTP was sent and False when the request was
+    throttled. Callers must give the same public response either way so the
+    throttle cannot be used to probe phone numbers.
+    """
     # Generate a cryptographically secure six-digit code.
     code = f"{secrets.randbelow(1_000_000):06d}"
 
@@ -34,9 +66,34 @@ def request_otp(db: Session, phone: str) -> None:
         otp_hash="",
         expires_at=now + timedelta(seconds=settings.OTP_TTL_SECONDS),
         attempts=0,
+        # Use the application clock so the throttle compares like with like.
+        created_at=now,
     )
 
     try:
+        # Serialise concurrent requests for the same phone so two parallel
+        # calls cannot both pass the throttle check. The lock is released
+        # automatically at commit or rollback.
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:phone))"),
+            {"phone": phone},
+        )
+
+        if _is_throttled(db, phone, now):
+            db.rollback()
+            return False
+
+        # Only the newest OTP may be valid. Requesting a new code must not
+        # leave older codes (with their own attempt counters) usable.
+        db.execute(
+            update(OTPChallenge)
+            .where(
+                OTPChallenge.phone == phone,
+                OTPChallenge.consumed_at.is_(None),
+            )
+            .values(consumed_at=now)
+        )
+
         db.add(challenge)
         db.flush()
 
@@ -67,6 +124,8 @@ def request_otp(db: Session, phone: str) -> None:
             db.rollback()
 
         raise
+
+    return True
 
 
 def verify_otp(db: Session, phone: str, code: str) -> bool:

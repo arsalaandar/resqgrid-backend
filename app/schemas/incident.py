@@ -17,7 +17,6 @@ from app.core.incident_options import (
     INCIDENT_SEVERITY_LEVELS,
 )
 
-
 # Each count column is a 32-bit integer; larger values would fail at insert.
 MAX_COUNT = 10_000_000
 # Free-form departmental answers are stored as JSON, so bound their size.

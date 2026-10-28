@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Use a shared store such as redis://host:6379/0 for multiple workers.
     RATE_LIMIT_STORAGE_URI: str = "memory://"
 
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+
     INCIDENT_PHOTO_STORAGE_DIR: str = "storage/incident_photos"
     INCIDENT_PHOTO_MAX_SIZE_BYTES: int = 10 * 1024 * 1024
     # Total accepted bytes per upload request, across all files.

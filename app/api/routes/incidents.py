@@ -9,6 +9,7 @@ from app.core.incident_options import (
     INCIDENT_CATEGORIES,
     INCIDENT_SEVERITY_LEVELS,
 )
+from app.core.roles import ADMIN_ROLES, Role
 from app.db.dependencies import get_db
 from app.models.incident import Incident
 from app.models.user import User
@@ -40,7 +41,7 @@ def report_incident(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role.upper() == "OFFICIAL":
+    if current_user.role.upper() == Role.OFFICIAL:
         if not current_user.assigned_district or not current_user.assigned_tehsil:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -89,7 +90,7 @@ def get_assigned_incidents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role.upper() != "OFFICIAL":
+    if current_user.role.upper() != Role.OFFICIAL:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is for field officials only.",
@@ -161,10 +162,10 @@ def get_incident(
 
     statement = select(Incident).where(Incident.id == incident_id)
 
-    if role == "CITIZEN":
+    if role == Role.CITIZEN:
         statement = statement.where(Incident.reporter_id == current_user.id)
 
-    elif role == "OFFICIAL":
+    elif role == Role.OFFICIAL:
         if not current_user.assigned_district or not current_user.assigned_tehsil:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -177,7 +178,7 @@ def get_incident(
             _visible_to_official(current_user),
         )
 
-    elif role not in {"ADMIN", "SUPER_ADMIN"}:
+    elif role not in ADMIN_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this incident.",

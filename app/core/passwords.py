@@ -27,3 +27,36 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return _password_hash.verify(password, stored_hash)
     except (ValueError, TypeError, UnknownHashError):
         return False
+
+
+# Verified against when the account does not exist (or has no password), so
+# that every login attempt costs one full hash verification and response time
+# does not reveal which phone numbers belong to staff accounts.
+_DUMMY_HASH = _password_hash.hash("timing-equalizer-password")
+
+
+def verify_password_timing_safe(
+    password: str,
+    stored_hash: str | None,
+) -> tuple[bool, str | None]:
+    """Verify a password in roughly constant time.
+
+    Returns ``(is_valid, upgraded_hash)``. ``upgraded_hash`` is a new hash to
+    store when the old one used outdated parameters, otherwise ``None``.
+    When ``stored_hash`` is missing the work is still done against a dummy
+    hash and the result is always ``(False, None)``.
+    """
+    candidate = stored_hash or _DUMMY_HASH
+
+    try:
+        is_valid, upgraded_hash = _password_hash.verify_and_update(
+            password or "",
+            candidate,
+        )
+    except (ValueError, TypeError, UnknownHashError):
+        return False, None
+
+    if not stored_hash or not password:
+        return False, None
+
+    return is_valid, upgraded_hash

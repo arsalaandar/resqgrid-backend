@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.passwords import hash_password
 from app.core.permissions import require_roles
+from app.core.roles import Role
 from app.db.dependencies import get_db
 from app.models.incident import Incident
 from app.models.user import User
@@ -28,7 +29,7 @@ router = APIRouter(
 
 @router.get("/check-access")
 def check_admin_access(
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "ADMIN")),
+    current_user: User = Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN)),
 ):
     return {
         "message": "Admin access granted",
@@ -44,7 +45,7 @@ def check_admin_access(
 )
 def create_admin(
     payload: AdminAccountCreate,
-    current_user: User = Depends(require_roles("SUPER_ADMIN")),
+    current_user: User = Depends(require_roles(Role.SUPER_ADMIN)),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(User.id).where(User.phone == payload.phone))
@@ -57,7 +58,7 @@ def create_admin(
     account = User(
         phone=payload.phone,
         password_hash=hash_password(payload.password),
-        role="ADMIN",
+        role=Role.ADMIN.value,
         designation=payload.designation,
         department=payload.department,
         assigned_district=None,
@@ -89,7 +90,7 @@ def create_admin(
 )
 def create_official(
     payload: OfficialAccountCreate,
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "ADMIN")),
+    current_user: User = Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
     existing = db.scalar(select(User.id).where(User.phone == payload.phone))
@@ -102,7 +103,7 @@ def create_official(
     account = User(
         phone=payload.phone,
         password_hash=hash_password(payload.password),
-        role="OFFICIAL",
+        role=Role.OFFICIAL.value,
         designation=payload.designation,
         department=payload.department,
         assigned_district=payload.assigned_district,
@@ -140,7 +141,7 @@ def list_state_incidents(
     date_to: datetime | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(require_roles("SUPER_ADMIN", "ADMIN")),
+    current_user: User = Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
     # Build one reusable filtered query.

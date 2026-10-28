@@ -15,6 +15,8 @@ from app.services.photo_gps import distance_meters, extract_photo_gps
 
 logger = logging.getLogger(__name__)
 
+DIMENSIONS_TOO_LARGE = "An uploaded photo has dimensions that are too large."
+
 ALLOWED_FORMATS = {
     "JPEG": "image/jpeg",
     "PNG": "image/png",
@@ -130,17 +132,18 @@ def upload_incident_photos(
 
                     # Reject oversized bitmaps from the header alone, before
                     # any pixel data is decoded.
-                    if image.width * image.height > settings.INCIDENT_PHOTO_MAX_PIXELS:
+                    pixels = image.width * image.height
+                    if pixels > settings.INCIDENT_PHOTO_MAX_PIXELS:
                         raise HTTPException(
                             status_code=422,
-                            detail="An uploaded photo has dimensions that are too large.",
+                            detail=DIMENSIONS_TOO_LARGE,
                         )
 
                     image.verify()
             except Image.DecompressionBombError as exc:
                 raise HTTPException(
                     status_code=422,
-                    detail="An uploaded photo has dimensions that are too large.",
+                    detail=DIMENSIONS_TOO_LARGE,
                 ) from exc
             except (
                 UnidentifiedImageError,
@@ -196,7 +199,7 @@ def upload_incident_photos(
             except Image.DecompressionBombError as exc:
                 raise HTTPException(
                     status_code=422,
-                    detail="An uploaded photo has dimensions that are too large.",
+                    detail=DIMENSIONS_TOO_LARGE,
                 ) from exc
             except (OSError, ValueError, SyntaxError) as exc:
                 raise HTTPException(

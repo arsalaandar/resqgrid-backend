@@ -14,6 +14,11 @@ exclude = [
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+# env.py must import the models for their side effect (registering tables on
+# Base.metadata) after configuring settings, so these rules do not apply.
+"alembic/env.py" = ["E402", "F401", "I001"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

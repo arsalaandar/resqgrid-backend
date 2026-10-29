@@ -65,9 +65,7 @@ def test_application_includes_all_expected_routers():
                 f"Router endpoint {path} was not registered in OpenAPI"
             )
 
-            registered_methods = {
-                method.upper() for method in registered_paths[path]
-            }
+            registered_methods = {method.upper() for method in registered_paths[path]}
 
             for method in methods:
                 assert method.upper() in registered_methods, (

@@ -1,4 +1,3 @@
-
 from io import BytesIO
 
 import pytest
@@ -33,23 +32,17 @@ def make_jpeg_with_gps(
 
 
 def test_distance_meters_returns_zero_for_same_coordinates():
-    distance = distance_meters(
-        34.0837, 74.7973, 34.0837, 74.7973
-    )
+    distance = distance_meters(34.0837, 74.7973, 34.0837, 74.7973)
     assert distance == 0
 
 
 def test_distance_meters_accepts_point_within_100_metres():
-    distance = distance_meters(
-        34.0837, 74.7973, 34.0842, 74.7973
-    )
+    distance = distance_meters(34.0837, 74.7973, 34.0842, 74.7973)
     assert distance < 100
 
 
 def test_distance_meters_detects_point_beyond_100_metres():
-    distance = distance_meters(
-        34.0837, 74.7973, 34.0848, 74.7973
-    )
+    distance = distance_meters(34.0837, 74.7973, 34.0848, 74.7973)
     assert distance > 100
 
 

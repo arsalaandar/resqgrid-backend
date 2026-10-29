@@ -271,7 +271,6 @@ async def test_unverified_citizen_is_verified_on_successful_login(
     assert user.is_verified is True
 
 
-
 @pytest.mark.asyncio
 async def test_unverified_citizen_database_failure_rolls_back(
     auth_client,
@@ -372,7 +371,6 @@ async def test_account_creation_integrity_error_without_account_returns_conflict
         ("CITIZEN", True, 200, None),
     ],
 )
-
 @pytest.mark.asyncio
 async def test_account_creation_race_rechecks_existing_account(
     auth_client,

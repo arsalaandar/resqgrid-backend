@@ -78,6 +78,7 @@ def citizen_incident(db_session, citizen):
     db_session.flush()
     return incident
 
+
 @pytest.fixture
 def official_with_valid_jurisdiction(db_session):
     user = User(
@@ -92,6 +93,7 @@ def official_with_valid_jurisdiction(db_session):
     db_session.add(user)
     db_session.flush()
     return user
+
 
 def _headers_for(user):
     token = create_access_token(
@@ -114,6 +116,7 @@ def _make_user(db_session, phone, role, **overrides):
     db_session.add(user)
     db_session.flush()
     return user
+
 
 @pytest.mark.asyncio
 async def test_incident_requires_authentication(api_client):
@@ -882,6 +885,7 @@ async def test_official_can_create_incident_within_jurisdiction(
     assert response.json()["reporter_id"] == official.id
     assert response.json()["status"] == "DRAFT"
 
+
 @pytest.mark.asyncio
 async def test_three_valid_photos_report_incident(
     api_client,
@@ -930,8 +934,7 @@ async def test_three_valid_photos_report_incident(
         f"/api/v1/incidents/{incident_id}/photos",
         headers={"Authorization": f"Bearer {token}"},
         files=[
-            ("files", (f"photo{i}.jpg", valid_jpeg, "image/jpeg"))
-            for i in range(1, 4)
+            ("files", (f"photo{i}.jpg", valid_jpeg, "image/jpeg")) for i in range(1, 4)
         ],
     )
 
@@ -953,6 +956,8 @@ async def test_three_valid_photos_report_incident(
 
     # Exactly three files should have been written.
     assert len(list(tmp_path.iterdir())) == 3
+
+
 @pytest.mark.asyncio
 async def test_photo_upload_rejects_reported_incident(
     api_client, db_session, citizen, citizen_incident
@@ -969,16 +974,14 @@ async def test_photo_upload_rejects_reported_incident(
     response = await api_client.post(
         f"/api/v1/incidents/{incident_id}/photos",
         headers={"Authorization": f"Bearer {token}"},
-        files=[
-            ("files", (f"photo{i}.jpg", b"unused", "image/jpeg"))
-            for i in range(3)
-        ],
+        files=[("files", (f"photo{i}.jpg", b"unused", "image/jpeg")) for i in range(3)],
     )
 
     assert response.status_code == 409
     assert response.json()["detail"] == (
         "Photos can only be uploaded to an incident draft."
     )
+
 
 @pytest.mark.asyncio
 async def test_photo_upload_rejects_empty_file(
@@ -1015,6 +1018,7 @@ async def test_photo_upload_rejects_empty_file(
         .count()
     )
     assert photo_count == 0
+
 
 @pytest.mark.asyncio
 async def test_photo_upload_rejects_gps_too_far_from_incident(
@@ -1059,8 +1063,7 @@ async def test_photo_upload_rejects_gps_too_far_from_incident(
         f"/api/v1/incidents/{incident_id}/photos",
         headers={"Authorization": f"Bearer {token}"},
         files=[
-            ("files", (f"photo{i}.jpg", valid_jpeg, "image/jpeg"))
-            for i in range(1, 4)
+            ("files", (f"photo{i}.jpg", valid_jpeg, "image/jpeg")) for i in range(1, 4)
         ],
     )
 
@@ -1078,6 +1081,7 @@ async def test_photo_upload_rejects_gps_too_far_from_incident(
     )
     assert photo_count == 0
     assert list(tmp_path.iterdir()) == []
+
 
 @pytest.mark.asyncio
 async def test_official_without_jurisdiction_cannot_view_incident(

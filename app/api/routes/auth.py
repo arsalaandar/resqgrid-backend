@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -121,11 +120,7 @@ def verify_citizen_otp(
             db.rollback()
 
             # A concurrent request may have created the account.
-            account = (
-                db.query(User)
-                .filter(User.phone == payload.phone)
-                .first()
-            )
+            account = db.query(User).filter(User.phone == payload.phone).first()
 
             if account is None:
                 raise HTTPException(
@@ -163,9 +158,7 @@ def verify_citizen_otp(
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         refresh_expires_in=max(
             0,
-            int(
-                (refresh_expiry - datetime.now(UTC)).total_seconds()
-            ),
+            int((refresh_expiry - datetime.now(UTC)).total_seconds()),
         ),
         user_id=account.id,
         role=account.role.upper(),

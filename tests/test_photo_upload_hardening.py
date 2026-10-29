@@ -117,9 +117,7 @@ async def test_stored_photos_have_no_exif_or_gps(
             assert len(exif) == 0
 
     records = db_session.query(IncidentPhoto).all()
-    assert {r.size_bytes for r in records} == {
-        path.stat().st_size for path in stored
-    }
+    assert {r.size_bytes for r in records} == {path.stat().st_size for path in stored}
     assert all(r.content_type == "image/jpeg" for r in records)
 
 
@@ -205,9 +203,7 @@ async def test_combined_upload_size_is_capped(
 
 
 @pytest.mark.asyncio
-async def test_corrupt_png_returns_422(
-    auth_client, citizen, draft_incident, storage
-):
+async def test_corrupt_png_returns_422(auth_client, citizen, draft_incident, storage):
     buffer = BytesIO()
     Image.new("RGB", (30, 30), "red").save(buffer, format="PNG")
     png = bytearray(buffer.getvalue())

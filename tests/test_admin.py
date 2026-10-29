@@ -1,4 +1,3 @@
-
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -77,9 +76,7 @@ async def test_admin_cannot_create_another_admin(auth_client, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_super_admin_can_create_admin(
-    auth_client, super_admin_user
-):
+async def test_super_admin_can_create_admin(auth_client, super_admin_user):
     response = await auth_client.post(
         "/api/v1/admin/admins",
         headers=auth_headers(super_admin_user),
@@ -111,9 +108,7 @@ async def test_admin_can_create_official(auth_client, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_super_admin_can_create_official(
-    auth_client, super_admin_user
-):
+async def test_super_admin_can_create_official(auth_client, super_admin_user):
     response = await auth_client.post(
         "/api/v1/admin/officials",
         headers=auth_headers(super_admin_user),
@@ -135,9 +130,7 @@ async def test_unauthenticated_cannot_create_official(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_admin_phone_is_rejected(
-    auth_client, super_admin_user
-):
+async def test_duplicate_admin_phone_is_rejected(auth_client, super_admin_user):
     payload = admin_payload()
 
     first = await auth_client.post(
@@ -156,9 +149,7 @@ async def test_duplicate_admin_phone_is_rejected(
 
 
 @pytest.mark.asyncio
-async def test_invalid_phone_is_rejected(
-    auth_client, super_admin_user
-):
+async def test_invalid_phone_is_rejected(auth_client, super_admin_user):
     response = await auth_client.post(
         "/api/v1/admin/admins",
         headers=auth_headers(super_admin_user),
@@ -169,9 +160,7 @@ async def test_invalid_phone_is_rejected(
 
 
 @pytest.mark.asyncio
-async def test_short_password_is_rejected(
-    auth_client, super_admin_user
-):
+async def test_short_password_is_rejected(auth_client, super_admin_user):
     response = await auth_client.post(
         "/api/v1/admin/admins",
         headers=auth_headers(super_admin_user),
@@ -182,9 +171,7 @@ async def test_short_password_is_rejected(
 
 
 @pytest.mark.asyncio
-async def test_invalid_official_district_is_rejected(
-    auth_client, admin_user
-):
+async def test_invalid_official_district_is_rejected(auth_client, admin_user):
     response = await auth_client.post(
         "/api/v1/admin/officials",
         headers=auth_headers(admin_user),
@@ -195,9 +182,7 @@ async def test_invalid_official_district_is_rejected(
 
 
 @pytest.mark.asyncio
-async def test_tehsil_from_another_district_is_rejected(
-    auth_client, admin_user
-):
+async def test_tehsil_from_another_district_is_rejected(auth_client, admin_user):
     response = await auth_client.post(
         "/api/v1/admin/officials",
         headers=auth_headers(admin_user),
@@ -227,6 +212,8 @@ async def test_admin_and_super_admin_can_access_admin_check(
     assert admin_response.json()["role"] == "ADMIN"
     assert super_admin_response.status_code == 200
     assert super_admin_response.json()["role"] == "SUPER_ADMIN"
+
+
 @pytest.mark.asyncio
 async def test_admin_incident_list_filters_and_paginates(
     auth_client,
@@ -257,6 +244,7 @@ async def test_admin_incident_list_filters_and_paginates(
     for item in body["items"]:
         assert item["district"] == "Srinagar"
         assert item["status"] == "DRAFT"
+
 
 @pytest.mark.asyncio
 async def test_create_admin_integrity_error_rolls_back(

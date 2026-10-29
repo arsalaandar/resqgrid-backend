@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
@@ -58,6 +57,4 @@ class RefreshToken(Base):
         nullable=True,
     )
 
-    __table_args__ = (
-        Index("ix_refresh_tokens_user_family", "user_id", "family_id"),
-    )
+    __table_args__ = (Index("ix_refresh_tokens_user_family", "user_id", "family_id"),)

@@ -1,4 +1,3 @@
-
 import getpass
 import re
 import sys
@@ -46,18 +45,16 @@ def main() -> None:
 
     try:
         existing_super_admin = db.scalar(
-            select(User.id).where(
-                func.upper(User.role) == Role.SUPER_ADMIN.value
-            ).limit(1)
+            select(User.id)
+            .where(func.upper(User.role) == Role.SUPER_ADMIN.value)
+            .limit(1)
         )
 
         if existing_super_admin is not None:
             print("A Super Admin already exists. Setup cancelled.")
             sys.exit(1)
 
-        existing_user = db.scalar(
-            select(User.id).where(User.phone == phone).limit(1)
-        )
+        existing_user = db.scalar(select(User.id).where(User.phone == phone).limit(1))
 
         if existing_user is not None:
             print("This phone number already belongs to an account.")

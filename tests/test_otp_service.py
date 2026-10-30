@@ -145,6 +145,7 @@ def test_provider_failure_invalidates_otp_challenge(db_session, monkeypatch):
     assert challenge.consumed_at is not None
     assert otp_service.verify_otp(db_session, phone, "000000") is False
 
+
 def test_expired_otp_is_consumed_and_rejected(db_session):
     phone = "+919100000094"
     now = datetime.now(UTC)
@@ -179,13 +180,9 @@ def test_wrong_otp_is_rejected_after_one_attempt(db_session, monkeypatch):
     assert challenge.consumed_at is None
 
 
-def test_request_otp_rolls_back_when_database_commit_fails(
-    db_session, monkeypatch
-):
+def test_request_otp_rolls_back_when_database_commit_fails(db_session, monkeypatch):
     provider = FakeOTPProvider()
-    monkeypatch.setattr(
-        otp_service, "get_otp_provider", lambda: provider
-    )
+    monkeypatch.setattr(otp_service, "get_otp_provider", lambda: provider)
 
     def fail_commit():
         raise RuntimeError("Simulated database failure")
@@ -196,13 +193,9 @@ def test_request_otp_rolls_back_when_database_commit_fails(
         otp_service.request_otp(db_session, "+919100000096")
 
 
-def test_provider_failure_does_not_leave_otp_usable(
-    db_session, monkeypatch
-):
+def test_provider_failure_does_not_leave_otp_usable(db_session, monkeypatch):
     provider = FakeOTPProvider(fail=True)
-    monkeypatch.setattr(
-        otp_service, "get_otp_provider", lambda: provider
-    )
+    monkeypatch.setattr(otp_service, "get_otp_provider", lambda: provider)
 
     phone = "+919100000097"
 
@@ -255,11 +248,7 @@ def test_verify_otp_database_failure_rolls_back(
     monkeypatch.setattr(db_session, "commit", original_commit)
     monkeypatch.setattr(db_session, "rollback", original_rollback)
 
-    challenge = (
-        db_session.query(OTPChallenge)
-        .filter(OTPChallenge.phone == phone)
-        .one()
-    )
+    challenge = db_session.query(OTPChallenge).filter(OTPChallenge.phone == phone).one()
     assert challenge.consumed_at is None
 
 
@@ -316,4 +305,3 @@ def test_provider_cleanup_commit_failure_rolls_back(
 
     assert commit_calls == 2
     assert rollback_called is True
-

@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -44,9 +43,7 @@ def staff_login(
     payload: StaffLoginRequest,
     db: Session = Depends(get_db),
 ):
-    account = db.scalar(
-        select(User).where(User.phone == payload.phone)
-    )
+    account = db.scalar(select(User).where(User.phone == payload.phone))
 
     # Always perform one password verification, even for unknown phones, so
     # response time does not reveal which numbers are staff accounts.
@@ -93,9 +90,7 @@ def staff_login(
         expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         refresh_expires_in=max(
             0,
-            int(
-                (refresh_expiry - datetime.now(UTC)).total_seconds()
-            ),
+            int((refresh_expiry - datetime.now(UTC)).total_seconds()),
         ),
         user_id=account.id,
         role=account.role.upper(),

@@ -44,6 +44,7 @@ def test_engine():
     finally:
         engine.dispose()
 
+
 @pytest_asyncio.fixture
 async def auth_client(db_session):
     def override_get_db():
@@ -61,6 +62,7 @@ async def auth_client(db_session):
             yield client
     finally:
         app.dependency_overrides.pop(get_db, None)
+
 
 @pytest.fixture
 def db_session(test_engine) -> Generator[Session]:
@@ -81,6 +83,7 @@ def db_session(test_engine) -> Generator[Session]:
         if transaction.is_active:
             transaction.rollback()
         connection.close()
+
 
 @pytest.fixture(autouse=True)
 def reset_rate_limits():

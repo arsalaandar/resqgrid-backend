@@ -1,4 +1,3 @@
-
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -57,9 +56,7 @@ def _revoke_all_user_sessions(db: Session, user_id: int, now: datetime) -> None:
 def create_refresh_session(db: Session, user: User) -> tuple[str, datetime]:
     """Create a refresh-token session for a successfully authenticated user."""
     now = datetime.now(UTC)
-    session_expiry = now + timedelta(
-        days=settings.JWT_SESSION_ABSOLUTE_EXPIRE_DAYS
-    )
+    session_expiry = now + timedelta(days=settings.JWT_SESSION_ABSOLUTE_EXPIRE_DAYS)
     token_expiry = min(
         now + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
         session_expiry,
@@ -115,9 +112,7 @@ def rotate_refresh_token(
             raise _unauthorized()
 
         user = db.scalar(
-            select(User)
-            .where(User.id == record.user_id)
-            .with_for_update()
+            select(User).where(User.id == record.user_id).with_for_update()
         )
 
         if user is None:
@@ -125,10 +120,7 @@ def rotate_refresh_token(
             db.commit()
             raise _unauthorized()
 
-        if (
-            not user.is_active
-            or user.token_version != record.token_version
-        ):
+        if not user.is_active or user.token_version != record.token_version:
             # The account was deactivated or its credentials changed. Every
             # session the user holds is now untrustworthy, not just this one.
             _revoke_all_user_sessions(db, user.id, now)

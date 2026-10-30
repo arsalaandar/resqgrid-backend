@@ -7,9 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str
 
-    APP_ENV: Literal["development", "testing", "staging", "production"] = (
-        "development"
-    )
+    APP_ENV: Literal["development", "testing", "staging", "production"] = "development"
 
     OTP_PROVIDER: str = "console"
     OTP_HMAC_SECRET: str = Field(min_length=32)
@@ -54,14 +52,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_security_settings(self):
         if self.JWT_SECRET_KEY == self.OTP_HMAC_SECRET:
-            raise ValueError(
-                "JWT_SECRET_KEY and OTP_HMAC_SECRET must be different."
-            )
+            raise ValueError("JWT_SECRET_KEY and OTP_HMAC_SECRET must be different.")
 
-        if (
-            self.JWT_SESSION_ABSOLUTE_EXPIRE_DAYS
-            < self.JWT_REFRESH_TOKEN_EXPIRE_DAYS
-        ):
+        if self.JWT_SESSION_ABSOLUTE_EXPIRE_DAYS < self.JWT_REFRESH_TOKEN_EXPIRE_DAYS:
             raise ValueError(
                 "JWT_SESSION_ABSOLUTE_EXPIRE_DAYS must be greater than or "
                 "equal to JWT_REFRESH_TOKEN_EXPIRE_DAYS."
@@ -70,8 +63,7 @@ class Settings(BaseSettings):
         if self.APP_ENV in ("staging", "production"):
             if self.OTP_PROVIDER == "console":
                 raise ValueError(
-                    "The console OTP provider is not allowed in this "
-                    "environment."
+                    "The console OTP provider is not allowed in this environment."
                 )
 
             if self.RATE_LIMIT_STORAGE_URI.startswith("memory://"):

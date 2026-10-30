@@ -127,9 +127,7 @@ async def test_existing_account_performs_exactly_one_verification(
 
 
 @pytest.mark.asyncio
-async def test_citizen_with_correct_password_is_still_rejected(
-    auth_client, db_session
-):
+async def test_citizen_with_correct_password_is_still_rejected(auth_client, db_session):
     user = make_user(db_session, "+919100000904", role="CITIZEN")
 
     response = await auth_client.post(
@@ -164,9 +162,7 @@ async def test_sixth_staff_login_attempt_is_rate_limited(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_login_upgrades_a_hash_with_outdated_parameters(
-    auth_client, db_session
-):
+async def test_login_upgrades_a_hash_with_outdated_parameters(auth_client, db_session):
     weak_hasher = PasswordHash(
         (Argon2Hasher(time_cost=1, memory_cost=8, parallelism=1),)
     )
@@ -232,9 +228,7 @@ async def test_credential_change_revokes_every_session_of_that_user(
 
 
 @pytest.mark.asyncio
-async def test_deactivation_revokes_every_session_of_that_user(
-    auth_client, db_session
-):
+async def test_deactivation_revokes_every_session_of_that_user(auth_client, db_session):
     user = make_user(db_session, "+919100000909", role="CITIZEN")
     first, _ = create_refresh_session(db=db_session, user=user)
     create_refresh_session(db=db_session, user=user)
@@ -280,9 +274,7 @@ async def test_logout_endpoint_is_rate_limited(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_change_password_endpoint_is_rate_limited(
-    auth_client, db_session
-):
+async def test_change_password_endpoint_is_rate_limited(auth_client, db_session):
     user = make_user(db_session, "+919100000910")
     statuses = []
 

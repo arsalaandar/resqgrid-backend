@@ -106,9 +106,7 @@ async def test_official_sees_reported_incident_in_jurisdiction(
 
 
 @pytest.mark.asyncio
-async def test_official_still_sees_their_own_draft(
-    auth_client, db_session, official
-):
+async def test_official_still_sees_their_own_draft(auth_client, db_session, official):
     own_draft = make_incident(db_session, official, status="DRAFT")
 
     by_id = await auth_client.get(
@@ -123,9 +121,7 @@ async def test_official_still_sees_their_own_draft(
 
 
 @pytest.mark.asyncio
-async def test_admin_can_still_see_drafts(
-    auth_client, db_session, citizen, admin
-):
+async def test_admin_can_still_see_drafts(auth_client, db_session, citizen, admin):
     draft = make_incident(db_session, citizen, status="DRAFT")
 
     response = await auth_client.get(
@@ -241,9 +237,7 @@ async def post_incident(client, user, body=None, raw=None):
             headers={**headers(user), "Content-Type": "application/json"},
             content=raw,
         )
-    return await client.post(
-        "/api/v1/incidents", headers=headers(user), json=body
-    )
+    return await client.post("/api/v1/incidents", headers=headers(user), json=body)
 
 
 @pytest.mark.asyncio
@@ -280,9 +274,7 @@ async def test_past_incident_time_is_accepted(auth_client, citizen):
 
 
 @pytest.mark.asyncio
-async def test_oversized_departmental_details_are_rejected(
-    auth_client, citizen
-):
+async def test_oversized_departmental_details_are_rejected(auth_client, citizen):
     big = {"notes": "x" * 25_000}
 
     response = await post_incident(
@@ -295,9 +287,7 @@ async def test_oversized_departmental_details_are_rejected(
 
 
 @pytest.mark.asyncio
-async def test_reasonable_departmental_details_are_accepted(
-    auth_client, citizen
-):
+async def test_reasonable_departmental_details_are_accepted(auth_client, citizen):
     response = await post_incident(
         auth_client,
         citizen,
@@ -308,9 +298,7 @@ async def test_reasonable_departmental_details_are_accepted(
 
 
 @pytest.mark.asyncio
-async def test_nan_in_departmental_details_is_rejected_not_a_500(
-    auth_client, citizen
-):
+async def test_nan_in_departmental_details_is_rejected_not_a_500(auth_client, citizen):
     raw = json.dumps(payload(departmental_details={})).replace(
         '"departmental_details": {}',
         '"departmental_details": {"evacuation": {"x": NaN}}',
@@ -367,9 +355,7 @@ def test_purge_deletes_only_old_drafts(db_session, citizen):
     remaining = set(
         db_session.scalars(
             select(Incident.id).where(
-                Incident.id.in_(
-                    [old_draft_id, fresh_draft_id, old_reported_id]
-                )
+                Incident.id.in_([old_draft_id, fresh_draft_id, old_reported_id])
             )
         )
     )

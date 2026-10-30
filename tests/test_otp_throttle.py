@@ -79,9 +79,7 @@ def test_hourly_cap_blocks_further_requests(db_session, provider, monkeypatch):
     assert len(provider.sent) == 3
 
 
-def test_daily_cap_blocks_even_when_hour_is_quiet(
-    db_session, provider, monkeypatch
-):
+def test_daily_cap_blocks_even_when_hour_is_quiet(db_session, provider, monkeypatch):
     monkeypatch.setattr(settings, "OTP_RESEND_COOLDOWN_SECONDS", 0)
     monkeypatch.setattr(settings, "OTP_MAX_REQUESTS_PER_HOUR", 100)
     monkeypatch.setattr(settings, "OTP_MAX_REQUESTS_PER_DAY", 3)
@@ -96,9 +94,7 @@ def test_daily_cap_blocks_even_when_hour_is_quiet(
     assert otp_service.request_otp(db_session, phone) is False
 
 
-def test_requests_older_than_a_day_do_not_count(
-    db_session, provider, monkeypatch
-):
+def test_requests_older_than_a_day_do_not_count(db_session, provider, monkeypatch):
     monkeypatch.setattr(settings, "OTP_RESEND_COOLDOWN_SECONDS", 0)
     monkeypatch.setattr(settings, "OTP_MAX_REQUESTS_PER_DAY", 1)
     phone = "+919100000606"
@@ -115,9 +111,7 @@ def test_throttle_is_per_phone(db_session, provider):
     assert len(provider.sent) == 2
 
 
-def test_new_request_invalidates_the_previous_code(
-    db_session, provider, monkeypatch
-):
+def test_new_request_invalidates_the_previous_code(db_session, provider, monkeypatch):
     monkeypatch.setattr(settings, "OTP_RESEND_COOLDOWN_SECONDS", 0)
     phone = "+919100000609"
 
@@ -152,16 +146,12 @@ def test_requesting_new_codes_cannot_reset_the_guess_budget(
     assert sent == settings.OTP_MAX_REQUESTS_PER_HOUR
 
 
-def test_provider_failure_still_counts_toward_the_throttle(
-    db_session, monkeypatch
-):
+def test_provider_failure_still_counts_toward_the_throttle(db_session, monkeypatch):
     class FailingProvider:
         def send_otp(self, phone, code):
             raise RuntimeError("provider down")
 
-    monkeypatch.setattr(
-        otp_service, "get_otp_provider", lambda: FailingProvider()
-    )
+    monkeypatch.setattr(otp_service, "get_otp_provider", lambda: FailingProvider())
     phone = "+919100000611"
 
     with pytest.raises(RuntimeError):
@@ -182,9 +172,7 @@ def test_created_at_uses_the_application_clock(db_session, provider):
 
 
 @pytest.mark.asyncio
-async def test_route_gives_the_same_response_when_throttled(
-    auth_client, provider
-):
+async def test_route_gives_the_same_response_when_throttled(auth_client, provider):
     payload = {"phone": "+919100000613"}
 
     first = await auth_client.post(f"{BASE_URL}/request-otp", json=payload)

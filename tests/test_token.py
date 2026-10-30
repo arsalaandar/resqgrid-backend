@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -106,9 +105,7 @@ async def test_invalid_refresh_token_is_rejected(auth_client):
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == (
-        "Invalid or expired refresh token."
-    )
+    assert response.json()["detail"] == ("Invalid or expired refresh token.")
 
 
 @pytest.mark.asyncio
@@ -140,9 +137,7 @@ async def test_expired_refresh_token_is_rejected(
     raw_token = create_test_session(db_session, user)
 
     record = db_session.scalar(
-        select(RefreshToken).where(
-            RefreshToken.user_id == user.id
-        )
+        select(RefreshToken).where(RefreshToken.user_id == user.id)
     )
     assert record is not None
 
@@ -155,6 +150,7 @@ async def test_expired_refresh_token_is_rejected(
     )
 
     assert response.status_code == 401
+
 
 @pytest.mark.asyncio
 async def test_inactive_user_cannot_refresh(auth_client, db_session):

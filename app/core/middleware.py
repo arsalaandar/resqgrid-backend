@@ -4,8 +4,15 @@ import time
 import uuid
 
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.routing import Match
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core.metrics import (
+    HTTP_REQUEST_DURATION,
+    HTTP_REQUESTS,
+    HTTP_REQUESTS_IN_PROGRESS,
+    method_label,
+)
 from app.core.request_context import reset_request_id, set_request_id
 
 access_logger = logging.getLogger("app.access")
@@ -15,7 +22,31 @@ access_logger = logging.getLogger("app.access")
 SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 # Health checks run every few seconds, so keep them out of normal logs.
-QUIET_PATHS = {"/health/live", "/health/ready"}
+QUIET_PATHS = {"/health/live", "/health/ready", "/metrics"}
+
+# Prometheus scrapes /metrics constantly. Leaving it out of the numbers stops
+# the monitoring from measuring itself.
+METRICS_PATH = "/metrics"
+
+
+def route_template(scope: Scope) -> str:
+    """Return the route's path template, such as /incidents/{incident_id}.
+
+    FastAPI's own routes record themselves in the scope. Built-in pages such
+    as /docs do not, so for those we ask the router which route matches.
+    """
+    route = scope.get("route")
+
+    if route is not None:
+        return route.path
+
+    for candidate in getattr(scope.get("app"), "routes", []):
+        match, _ = candidate.matches(scope)
+
+        if match == Match.FULL:
+            return candidate.path
+
+    return "unmatched"
 
 
 class RequestContextMiddleware:
@@ -40,6 +71,10 @@ class RequestContextMiddleware:
 
         started = time.perf_counter()
         status_code = 500  # Stays 500 if the app raises before responding.
+        measured = scope["path"] != METRICS_PATH
+
+        if measured:
+            HTTP_REQUESTS_IN_PROGRESS.inc()
 
         async def send_with_request_id(message: Message) -> None:
             nonlocal status_code
@@ -53,12 +88,19 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_with_request_id)
         finally:
-            duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            elapsed = time.perf_counter() - started
+            duration_ms = round(elapsed * 1000, 2)
 
             # Log the route template (/incidents/{incident_id}), never the real
             # URL: it keeps IDs and query strings out of the logs.
-            route = getattr(scope.get("route"), "path", None) or "unmatched"
+            route = route_template(scope)
             client = scope.get("client")
+
+            if measured:
+                method = method_label(scope["method"])
+                HTTP_REQUESTS.labels(method, route, str(status_code)).inc()
+                HTTP_REQUEST_DURATION.labels(method, route).observe(elapsed)
+                HTTP_REQUESTS_IN_PROGRESS.dec()
 
             level = logging.DEBUG if scope["path"] in QUIET_PATHS else logging.INFO
             access_logger.log(

@@ -15,8 +15,10 @@ from app.api.routes.incident_photos import (
 )
 from app.api.routes.incidents import router as incidents_router
 from app.api.routes.me import router as me_router
+from app.api.routes.metrics import router as metrics_router
 from app.api.routes.staff_auth import router as staff_auth_router
 from app.api.routes.token import router as token_router
+from app.core.config import settings
 from app.core.logging_config import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.rate_limit import limiter
@@ -93,6 +95,9 @@ app.include_router(incident_photos_router)
 app.include_router(staff_auth_router)
 app.include_router(token_router)
 app.include_router(health_router)
+
+if settings.METRICS_ENABLED:
+    app.include_router(metrics_router)
 
 
 def _fix_binary(node):

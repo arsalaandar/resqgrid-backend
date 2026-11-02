@@ -32,6 +32,11 @@ class Settings(BaseSettings):
 
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
+    # Prometheus metrics endpoint.
+    METRICS_ENABLED: bool = True
+    # Bearer token Prometheus must send to read /metrics. Required in staging
+    # and production while metrics are enabled.
+    METRICS_TOKEN: str | None = Field(default=None, min_length=32)
 
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # "json" for servers and log tools, "text" for reading logs in a terminal.
@@ -74,6 +79,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Shared rate-limit storage (for example redis://) is "
                     "required in this environment."
+                )
+
+        if self.APP_ENV in ("staging", "production") and self.METRICS_ENABLED:
+            if not self.METRICS_TOKEN:
+                raise ValueError(
+                    "METRICS_TOKEN is required when metrics are enabled in this "
+                    "environment."
+                )
+
+            if self.METRICS_TOKEN in (self.JWT_SECRET_KEY, self.OTP_HMAC_SECRET):
+                raise ValueError(
+                    "METRICS_TOKEN must be different from the JWT and OTP secrets."
                 )
 
         return self

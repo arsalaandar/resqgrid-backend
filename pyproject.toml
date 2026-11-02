@@ -16,6 +16,7 @@ dependencies = [
     "python-multipart==0.0.32",
     "slowapi==0.1.10",
     "redis==8.1.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]

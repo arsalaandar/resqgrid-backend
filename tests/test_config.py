@@ -69,5 +69,46 @@ def test_production_with_safe_settings_loads():
         APP_ENV="production",
         OTP_PROVIDER="sms",
         RATE_LIMIT_STORAGE_URI="redis://localhost:6379/0",
+        METRICS_TOKEN="m" * 40,
     )
     assert config.APP_ENV == "production"
+
+
+SAFE_EXCEPT_METRICS = {
+    "OTP_PROVIDER": "sms",
+    "RATE_LIMIT_STORAGE_URI": "redis://localhost:6379/0",
+}
+
+
+def test_metrics_token_is_optional_in_development():
+    assert build().METRICS_TOKEN is None
+
+
+@pytest.mark.parametrize("env", ["staging", "production"])
+def test_metrics_token_is_required_outside_development(env):
+    with pytest.raises(ValidationError, match="METRICS_TOKEN is required"):
+        build(APP_ENV=env, **SAFE_EXCEPT_METRICS)
+
+
+@pytest.mark.parametrize("env", ["staging", "production"])
+def test_metrics_token_is_not_required_when_metrics_are_disabled(env):
+    config = build(APP_ENV=env, METRICS_ENABLED=False, **SAFE_EXCEPT_METRICS)
+    assert config.METRICS_TOKEN is None
+
+
+def test_short_metrics_token_is_rejected():
+    with pytest.raises(ValidationError):
+        build(METRICS_TOKEN="short")
+
+
+@pytest.mark.parametrize(
+    "reused_secret",
+    ["b" * 40, "a" * 40],  # the JWT secret, then the OTP secret, from VALID
+)
+def test_metrics_token_must_not_reuse_another_secret(reused_secret):
+    with pytest.raises(ValidationError, match="must be different from"):
+        build(
+            APP_ENV="production",
+            METRICS_TOKEN=reused_secret,
+            **SAFE_EXCEPT_METRICS,
+        )

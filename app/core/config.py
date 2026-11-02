@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
 
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # "json" for servers and log tools, "text" for reading logs in a terminal.
+    LOG_FORMAT: Literal["json", "text"] = "json"
+
     INCIDENT_PHOTO_STORAGE_DIR: str = "storage/incident_photos"
     INCIDENT_PHOTO_MAX_SIZE_BYTES: int = 10 * 1024 * 1024
     # Total accepted bytes per upload request, across all files.

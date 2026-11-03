@@ -1,5 +1,3 @@
-@"
-# Secrets and local config
 .env
 .env.*
 !.env.example
@@ -24,4 +22,4 @@ storage/
 .idea/
 .DS_Store
 Thumbs.db
-"@ | Out-File -Encoding utf8 .gitignore
+monitoring/metrics_token*

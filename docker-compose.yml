@@ -19,5 +19,43 @@ services:
       timeout: 5s
       retries: 5
 
+  # Monitoring stack. Start it with:
+  #   docker compose --profile monitoring up -d
+  # A plain "docker compose up -d" still starts only the database.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: resqgrid-prometheus
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/metrics_token:/etc/prometheus/metrics_token:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      # Lets the container reach the app running on your computer.
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: resqgrid-grafana
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      # Local use only (bound to 127.0.0.1). Change it before exposing Grafana.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:

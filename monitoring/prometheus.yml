@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # The deployed app on Render.
+  - job_name: resqgrid-render
+    scheme: https
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    authorization:
+      type: Bearer
+      # The file mounted in docker-compose.yml. It never goes in Git.
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["resqgrid-backend-uw99.onrender.com"]
+
+  # The app running on your own computer. Uncomment this to watch local
+  # experiments instead (and comment out the job above, so the two don't mix).
+  # - job_name: resqgrid-local
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["host.docker.internal:8000"]

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.core.config import settings
+from app.core.metrics import update_threadpool_metrics
 
 router = APIRouter(include_in_schema=False)
 
@@ -32,5 +33,8 @@ def require_metrics_token(authorization: str | None = Header(default=None)) -> N
 
 
 @router.get("/metrics", dependencies=[Depends(require_metrics_token)])
-def metrics() -> Response:
+async def metrics() -> Response:
+    # Async so it runs inside the event loop, where the thread pool can be read.
+    update_threadpool_metrics()
+
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

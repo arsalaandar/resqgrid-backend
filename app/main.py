@@ -22,6 +22,8 @@ from app.core.config import settings
 from app.core.logging_config import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.rate_limit import limiter
+from app.db.database import engine
+from app.db.instrumentation import instrument_engine
 
 configure_logging()
 
@@ -98,6 +100,7 @@ app.include_router(health_router)
 
 if settings.METRICS_ENABLED:
     app.include_router(metrics_router)
+    instrument_engine(engine, settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW)
 
 
 def _fix_binary(node):

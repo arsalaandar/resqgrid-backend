@@ -11,9 +11,9 @@ dependencies = [
     "psycopg[binary]==3.3.6",
     "PyJWT==2.15.1",
     "pwdlib[argon2]==0.3.1",
-    "pydantic-settings==2.16.1",
+    "pydantic-settings==2.16.2",
     "pillow==13.0.0",
-    "python-multipart==0.0.32",
+    "python-multipart==0.0.33",
     "slowapi==0.1.10",
     "redis==8.1.0",
     "prometheus-client>=0.26.0",
@@ -21,7 +21,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-asyncio==1.4.1",
     "pytest-cov==7.1.0",
     "pytest-dotenv==0.5.2",

@@ -4,23 +4,26 @@
 
 ResQGrid is the backend for an emergency incident reporting platform. Citizens and field officials report incidents with a location and photographs, officials review what happens in their area, and admins manage staff accounts. A later milestone shares incidents with an external Decision Support System (DSS).
 
-The API is built with FastAPI and PostgreSQL. A Flutter mobile client is planned; this repository contains only the backend.
+The API is built with FastAPI and PostgreSQL. A Flutter mobile client is planned; this repository contains only the backend. The project is also a hands-on exercise in production-style backend engineering: security, testing, CI, observability and capacity planning.
 
-> **Status:** authentication, role-based access control, incident reporting and photo upload are implemented and covered by automated tests that run against a real PostgreSQL database in CI. The service is **not deployed yet**. See [Known limitations](#known-limitations) and [Roadmap](#roadmap).
+> **Status:** authentication, role-based access control, incident reporting and photo upload are implemented and covered by about 300 automated tests that run against a real PostgreSQL database in CI. Structured logs, health checks, Prometheus metrics, a Grafana dashboard and alert rules are in place. A **demo** runs on Render's free tier (see [Deployment](#deployment)); it is not production-ready. See [Known limitations](#known-limitations) and [Roadmap](#roadmap).
 
 ## Contents
 
 - [Technology stack](#technology-stack)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+- [Project structure](#project-structure)
 - [What is implemented](#what-is-implemented)
 - [API endpoints](#api-endpoints)
 - [Roles and permissions](#roles-and-permissions)
 - [Incident lifecycle](#incident-lifecycle)
 - [Rate limiting](#rate-limiting)
 - [Database and migrations](#database-and-migrations)
+- [Observability](#observability)
 - [Testing and CI](#testing-and-ci)
 - [Scripts](#scripts)
+- [Deployment](#deployment)
 - [Development workflow](#development-workflow)
 - [Security design](#security-design)
 - [Known limitations](#known-limitations)
@@ -38,9 +41,11 @@ The API is built with FastAPI and PostgreSQL. A Flutter mobile client is planned
 | Password hashing | `pwdlib` with Argon2id |
 | Images | Pillow |
 | Rate limiting | SlowAPI (in-memory in development, Redis in production) |
+| Observability | Structured JSON logs, Prometheus metrics, Grafana dashboard, Prometheus alert rules |
 | Packaging | `uv` with a committed `uv.lock` |
-| Tests and lint | pytest, pytest-asyncio, httpx, Ruff |
+| Tests and lint | pytest, pytest-asyncio, httpx, Ruff, promtool (alert rules) |
 | CI | GitHub Actions, Dependabot |
+| Hosting (demo) | Render free tier |
 
 ## Quick start
 
@@ -75,6 +80,8 @@ Open `http://127.0.0.1:8000/docs` for the interactive API documentation.
 
 Without activating the environment, prefix commands with `uv run`, for example `uv run pytest`.
 
+Logs are JSON lines by default. For easier reading in a terminal, add `LOG_FORMAT=text` to `.env`. To run the monitoring stack (Prometheus and Grafana), see [Observability](#observability).
+
 ## Configuration
 
 Settings are read from environment variables or a local `.env` file, which is ignored by Git. Copy `.env.example` as a starting point and **never commit real secrets**. Generate secrets with:
@@ -101,6 +108,10 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 | `OTP_MAX_REQUESTS_PER_HOUR` / `_PER_DAY` | `5` / `10` | Per-phone OTP request caps |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | Use `redis://host:6379/0` in staging and production |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `10` / `20` | Connection pool sizing |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
+| `LOG_FORMAT` | `json` | `json` for servers and log tools, `text` for reading logs in a terminal |
+| `METRICS_ENABLED` | `true` | Serve `/metrics`. When `false`, the endpoint does not exist |
+| `METRICS_TOKEN` | none | Bearer token required by `/metrics` when set. At least 32 characters. Required in staging and production while metrics are enabled, and must differ from the JWT and OTP secrets |
 | `INCIDENT_PHOTO_STORAGE_DIR` | `storage/incident_photos` | Where photos are written |
 | `INCIDENT_PHOTO_MIN_COUNT` / `_MAX_COUNT` | `3` / `10` | Photos required to report an incident |
 | `INCIDENT_PHOTO_MAX_SIZE_BYTES` | `10 MiB` | Per-photo size limit |
@@ -112,7 +123,28 @@ The app validates its settings at startup and refuses to start if:
 
 - either secret is shorter than 32 characters, or the two secrets are identical;
 - `JWT_SESSION_ABSOLUTE_EXPIRE_DAYS` is shorter than `JWT_REFRESH_TOKEN_EXPIRE_DAYS`;
-- `APP_ENV` is `staging` or `production` while `OTP_PROVIDER` is `console` or `RATE_LIMIT_STORAGE_URI` is `memory://`.
+- `APP_ENV` is `staging` or `production` while `OTP_PROVIDER` is `console` or `RATE_LIMIT_STORAGE_URI` is `memory://`;
+- `APP_ENV` is `staging` or `production` while metrics are enabled and `METRICS_TOKEN` is missing or equal to the JWT or OTP secret.
+
+## Project structure
+
+```
+app/
+  api/routes/     HTTP endpoints: auth, staff_auth, token, me, incidents,
+                  incident_photos, admin, health, metrics
+  core/           settings, security, roles, rate limiting, logging,
+                  request middleware, metrics definitions
+  db/             engine, sessions, query and connection-pool instrumentation
+  models/         SQLAlchemy models
+  schemas/        request and response models
+  services/       business logic: OTP, refresh tokens, incidents, photos
+  providers/otp/  OTP delivery providers (console only so far)
+alembic/          database migrations
+scripts/          operational scripts and a traffic generator
+tests/            automated tests (run against a real PostgreSQL database)
+monitoring/       Prometheus config, alert rules and tests, Grafana dashboard
+.github/          CI workflow and Dependabot configuration
+```
 
 ## What is implemented
 
@@ -141,6 +173,7 @@ The app validates its settings at startup and refuses to start if:
 **Platform**
 
 - Alembic migrations, a startup configuration check, validation errors that never echo submitted values, a script to purge abandoned drafts, and a CI pipeline.
+- Structured logs with request IDs, liveness and readiness endpoints, Prometheus metrics, a Grafana dashboard and alert rules (see [Observability](#observability)).
 
 ## API endpoints
 
@@ -148,7 +181,10 @@ All paths are under `/api/v1` unless shown. "Any user" means any authenticated a
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/` (no prefix) | Public | Liveness message |
+| GET | `/` (no prefix) | Public | Returns a "running" message. Use the health endpoints for checks |
+| GET | `/health/live` (no prefix) | Public | Liveness: the process is running. Never touches the database |
+| GET | `/health/ready` (no prefix) | Public | Readiness: runs `SELECT 1`. Returns `503` with a generic body if the database is unavailable |
+| GET | `/metrics` (no prefix) | Bearer `METRICS_TOKEN` when set | Prometheus metrics. Hidden from `/docs` |
 | POST | `/auth/citizen/request-otp` | Public | Request an OTP. The response is identical whether or not one was sent |
 | POST | `/auth/citizen/verify-otp` | Public | Exchange a valid OTP for tokens, creating the citizen account if needed |
 | POST | `/auth/staff/login` | Public | Staff phone and password login |
@@ -223,6 +259,101 @@ Review every autogenerated migration before committing it. After pulling a migra
 
 Tables: `users`, `otp_challenges`, `refresh_tokens`, `incidents`, `incident_photos`.
 
+Connections come from a pool (`DB_POOL_SIZE` plus `DB_MAX_OVERFLOW`). Opening a connection gives up after 5 seconds, so a database outage fails requests quickly instead of hanging.
+
+## Observability
+
+Logs say what happened to one request, metrics say how the system is doing overall, and alerts say when to look.
+
+### Logs and request IDs
+
+- Every request writes one access-log line. In JSON mode the fields are `time`, `level`, `logger`, `message`, `request_id`, `method`, `route`, `status`, `duration_ms` and `client_ip` (plus `exception` for errors).
+- `route` is the **route template** (`/api/v1/incidents/{incident_id}`), never the real URL, so IDs and query strings stay out of the logs. Unknown paths are logged as `unmatched`.
+- Every response carries an `X-Request-ID` header, and the same ID appears on every log line written while handling that request. A caller may supply its own ID only if it is 8 to 64 characters of letters, digits and dashes; anything else is replaced, which prevents forged log lines.
+- Only an allow-list of fields is ever written to the access log. Request bodies, passwords, tokens and OTPs are never logged.
+- Unhandled errors are logged once with a stack trace and the request ID, and the client receives a generic `500` response.
+- Health checks and `/metrics` requests are logged at `DEBUG` only, to keep normal logs readable.
+
+### Health checks
+
+- `GET /health/live` answers whether the process is running. It never touches the database, so a database outage does not make the platform restart a healthy app.
+- `GET /health/ready` runs `SELECT 1` and returns `503` with `{"status": "unavailable"}` if the database does not answer. The failure reason is logged but never returned.
+
+### Metrics
+
+`GET /metrics` serves Prometheus metrics. When `METRICS_TOKEN` is set, the request must carry `Authorization: Bearer <token>`; the token is compared in constant time.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `http_requests_total` | counter | `method`, `route`, `status` | Requests handled |
+| `http_request_duration_seconds` | histogram | `method`, `route` | Time to handle a request |
+| `http_requests_in_progress` | gauge | none | Requests being handled right now |
+| `db_pool_capacity` | gauge | none | Pool size plus overflow |
+| `db_pool_connections_in_use` | gauge | none | Connections checked out right now |
+| `db_pool_connections_idle` | gauge | none | Open connections waiting in the pool |
+| `db_connections_opened_total` | counter | none | New database connections opened |
+| `db_query_duration_seconds` | histogram | `operation` | Time per statement (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `OTHER`) |
+| `threadpool_threads_total` | gauge | none | Worker threads available to plain `def` routes |
+| `threadpool_threads_in_use` | gauge | none | Worker threads busy right now |
+| `threadpool_requests_waiting` | gauge | none | Requests waiting for a free worker thread |
+
+Label values are deliberately bounded: routes are templates, unusual HTTP methods become `OTHER`, and SQL text is reduced to five operation names. Unbounded labels (raw URLs, user IDs, phone numbers) would make the number of stored time series grow without limit. `/metrics` does not count itself.
+
+Metrics live in the memory of one process. With several Uvicorn workers each would report its own numbers; see [Known limitations](#known-limitations).
+
+### Monitoring stack (local)
+
+Prometheus and Grafana run in Docker Compose behind a `monitoring` profile, so a plain `docker compose up -d` still starts only PostgreSQL.
+
+1. Create `monitoring/metrics_token` containing only the metrics token, on one line. The file is Git-ignored (`monitoring/metrics_token*`). Create it **before** starting the stack, otherwise Docker creates a folder with that name.
+2. `monitoring/prometheus.yml` scrapes the Render demo by default. To watch an app running on your own computer instead, comment out the `resqgrid-render` job and uncomment `resqgrid-local`.
+3. Start the stack:
+
+```powershell
+docker compose --profile monitoring up -d
+```
+
+| Service | Address | Notes |
+|---|---|---|
+| Prometheus | `http://localhost:9090` | `/targets` shows whether scraping works, `/alerts` shows alert state |
+| Grafana | `http://localhost:3000` | Login `admin` with the password from `GRAFANA_ADMIN_PASSWORD` (default `admin`; local only, bound to 127.0.0.1) |
+
+Prometheus pulls from the app every 15 seconds, so it can watch a deployed app from any machine that can reach its URL. Data is only collected while the stack is running.
+
+Generate traffic for the graphs with:
+
+```powershell
+python -m scripts.demo_traffic --url http://127.0.0.1:8000 --seconds 60 --rps 20
+```
+
+Keep the rate low when pointing it at a deployed free-tier service.
+
+### Dashboard
+
+Grafana loads `monitoring/grafana/dashboards/resqgrid-overview.json` automatically. It has 15 panels in two groups:
+
+- **Service health (RED):** requests per second, server error rate, p95 latency, requests in progress, traffic by route, responses by status code, latency percentiles, average latency by route, slowest routes.
+- **Resources (why latency changes):** database connections in use against capacity, new connections per minute, query time and query rate by operation, the share of request time spent in the database, and worker threads busy against total and waiting.
+
+### Alerts
+
+Rules live in `monitoring/alerts.yml` and are evaluated by Prometheus every 15 seconds.
+
+| Alert | Fires when | Severity |
+|---|---|---|
+| `AppDown` | Prometheus cannot scrape the app for 2 minutes | critical |
+| `HighServerErrorRate` | More than 5% of API requests return 5xx for 5 minutes (needs at least 20 requests in 5 minutes) | critical |
+| `RepeatedServerErrors` | At least 5 API requests return 5xx within 10 minutes. Covers quiet periods where a percentage is meaningless | warning |
+| `HighLatency` | The slowest 5% of API requests exceed 2 seconds for 10 minutes. Photo uploads are excluded | warning |
+
+The rules have unit tests in `monitoring/alerts_test.yml`. They feed fake metric series to the rules and check that each alert fires when it should and stays quiet when it should not:
+
+```powershell
+docker run --rm -v "${PWD}/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v3.5.0 test rules /m/alerts_test.yml
+```
+
+Alertmanager is not configured, so alerts appear on the Prometheus page but do not reach a phone or inbox yet. The thresholds are provisional until a load test shows real behavior.
+
 ## Testing and CI
 
 Tests run against a dedicated PostgreSQL database named `resqgrid_test`. A safety check in `tests/conftest.py` refuses any other database name and refuses the application database. Each test runs inside a transaction that is rolled back, and rate-limit counters are reset before every test.
@@ -243,7 +374,9 @@ ruff check .                   # lint
 ruff format .                  # format
 ```
 
-GitHub Actions (`.github/workflows/ci.yml`) runs lint, a formatting check, and the full test suite against a PostgreSQL service container on every push to `main` and every pull request. Dependabot proposes dependency updates weekly; CI tests each one before you merge it.
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, a formatting check, and the full test suite with a coverage report against a PostgreSQL service container on every push to `main` and every pull request. Dependencies are installed from `uv.lock` with `--frozen`, so a stale lock file fails the build. Dependabot proposes updates to GitHub Actions and Python packages weekly; CI tests each one before you merge it.
+
+`main` is protected by a ruleset that requires a pull request and passing `lint` and `test` checks. The alert-rule tests (`promtool`) are run by hand and are not part of CI yet.
 
 ## Scripts
 
@@ -251,6 +384,30 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, a formatting check, and t
 |---|---|
 | `python -m scripts.bootstrap_super_admin` | Create the first `SUPER_ADMIN`. Prompts for the phone and password; nothing is stored in code or logs |
 | `python -m scripts.purge_stale_drafts --days 7` | Delete `DRAFT` incidents older than the given number of days. Suitable for a daily scheduled job |
+| `python -m scripts.demo_traffic --seconds 60 --rps 20` | Send a mix of requests to a running app so the dashboard has data. Options: `--url`, `--seconds`, `--rps` |
+
+## Deployment
+
+A demo runs on Render's free tier at `https://resqgrid-backend-uw99.onrender.com` (API documentation at `/docs`). It exists to show the app running and to give the monitoring stack something real to watch. Be aware that:
+
+- The free instance sleeps when idle, so the first request after a quiet period can take about a minute.
+- It runs with `APP_ENV=development`, because no real SMS provider or Redis is configured yet. OTP codes are **printed to the server log**, and no SMS is sent.
+- Uploaded photos are stored on the instance's local disk and disappear when it restarts or redeploys.
+- `/metrics` is protected by a bearer token.
+
+Render service settings for this repository:
+
+| Setting | Value |
+|---|---|
+| Build command | `uv sync --frozen && uv cache prune --ci` |
+| Start command | `uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Python version | Read from `.python-version` (3.13) |
+| Health check path | `/health/live` |
+| Environment | `APP_ENV`, `DATABASE_URL` (with the `postgresql+psycopg://` prefix), `JWT_SECRET_KEY`, `OTP_HMAC_SECRET`, `METRICS_TOKEN` |
+
+Use `/health/live` for the platform health check. A check that depends on the database (`/health/ready`) would make the platform restart a healthy app during a database outage, which does not fix the database. Create the first super admin by running `python -m scripts.bootstrap_super_admin` locally with `DATABASE_URL` pointed at the hosted database.
+
+A real production setup needs the items under [Roadmap](#roadmap): an SMS provider, Redis for shared rate limits, object storage for photos, a Dockerfile, backups and `APP_ENV=production`.
 
 ## Development workflow
 
@@ -259,6 +416,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, a formatting check, and t
 - Add or change dependencies with `uv add <package>`, and commit both `pyproject.toml` and `uv.lock`.
 - Upgrade one package with `uv lock --upgrade-package <name>`, or all of them with `uv lock --upgrade`, then run the tests.
 - Every behavior change comes with tests. For security-relevant code, check that the new test fails when the fix is removed.
+- Never commit secrets. `.env` and `monitoring/metrics_token*` are ignored; check with `git check-ignore -v <file>` before creating a secret file.
 - Update this README in the same pull request as the feature (see [Maintaining this README](#maintaining-this-readme)).
 
 ## Security design
@@ -269,30 +427,39 @@ GitHub Actions (`.github/workflows/ci.yml`) runs lint, a formatting check, and t
 - Passwords are Argon2id hashes with a 12-character minimum. Public login errors are identical for unknown users and wrong passwords.
 - Ownership and jurisdiction are checked on the server for every incident and photo operation.
 - Uploads are validated by decoding the image, never by filename or client content type, and are re-encoded without metadata before storage.
-- The database port in `docker-compose.yml` is bound to `127.0.0.1`.
+- The database port in `docker-compose.yml` is bound to `127.0.0.1`, and so are the Prometheus and Grafana ports.
+- Logs record route templates, never raw URLs, query strings, request bodies, passwords, tokens or OTPs. Caller-supplied request IDs are validated before use.
+- Unhandled errors and failed readiness checks return generic responses; details go only to the log.
+- `/metrics` requires a bearer token outside development, compared in constant time. The token is read from a Git-ignored file by Prometheus and never appears in configuration committed to the repository.
 - Secrets live in environment variables and are never committed. CI uses throwaway values that exist only inside the workflow.
 
 ## Known limitations
 
 - **Photo GPS is client-supplied.** EXIF coordinates can be forged, so the 100 m check catches honest mistakes, not deliberate fraud.
-- **Photos are stored on local disk** and there is no download endpoint yet. Use object storage before running more than one instance.
+- **Photos are stored on local disk** and there is no download endpoint yet. Use object storage before running more than one instance. On the Render free tier they are lost on every restart.
 - **No audit log yet.** Admin access to reporter phone numbers is not recorded.
 - **No status workflow beyond `DRAFT` to `REPORTED`.**
 - **A lost refresh response looks like token reuse.** If the server rotates a token but the client never receives the reply, the retry revokes the session family and the user must sign in again.
 - **Naive timestamps** (no timezone) in `incident_datetime` are accepted but cannot be checked against the clock.
 - **No request body size limit in the app.** Set one at the reverse proxy.
-- **No health endpoints, request IDs or structured logging yet.**
-- **Not deployed.** There is no Dockerfile for the API, staging environment or production configuration yet.
+- **No security headers or CORS configuration yet.**
+- **The demo is not production.** It uses the console OTP provider and in-memory rate limiting, and there is no Dockerfile for the API, staging environment or backup plan.
+- **Metrics are per process.** With several Uvicorn workers each would report its own numbers. Prometheus multiprocess mode would be needed.
+- **Alerts are only a first version.** There is no Alertmanager, so nothing is delivered to a phone or inbox, and rules are evaluated only while Prometheus is running (currently on a developer machine). The first 5xx on a brand-new route/status series is not counted by the rate-based alerts, because Prometheus cannot see a counter go from 0 to 1 on a series it has just created.
+- **No log search.** Logs are structured but only viewed through the hosting platform or a terminal.
+- **No load test yet,** so capacity and the alert thresholds are unmeasured.
 
 ## Roadmap
 
-1. Health endpoints (`/health/live`, `/health/ready`), request IDs, structured logs, security headers and CORS.
+1. Load testing and capacity planning: seed realistic data, run Locust scenarios in a resource-limited container, record one change per round in a results table, and tune pool sizes, workers, indexes and caching from what the dashboard shows.
 2. Append-only audit log for logins, account changes, status changes and admin data access.
 3. Incident status workflow with per-role transitions.
 4. Object storage for photos with authorized, short-lived download links.
-5. DSS integration using a transactional outbox with retries and signed payloads.
-6. Metrics (Prometheus) and error tracking (Sentry).
-7. Dockerfile, staging environment and production deployment with managed PostgreSQL, Redis, backups and runbooks.
+5. A real OTP provider (SMS) and Redis-backed rate limiting, so the app can run with `APP_ENV=production`.
+6. Dockerfile for the API, staging environment and production deployment with managed PostgreSQL, backups and runbooks.
+7. Security headers and CORS.
+8. DSS integration using a transactional outbox with retries and signed payloads.
+9. Alertmanager with a notification channel, log search (Loki or an ELK stack) and error tracking (Sentry).
 
 ## Change log
 
@@ -300,6 +467,12 @@ Newest first. Add a line for every merged feature or fix.
 
 | Date | Change |
 |---|---|
+| 2026-11 | Prometheus alert rules (`AppDown`, `HighServerErrorRate`, `RepeatedServerErrors`, `HighLatency`) with `promtool` unit tests |
+| 2026-11 | Prometheus and Grafana monitoring stack (Docker Compose profile), 15-panel dashboard, token-protected scraping of the Render demo |
+| 2026-11 | Resource metrics: database pool, query time, new connections and worker threads; finer latency buckets |
+| 2026-11 | Request metrics at `/metrics` (rate, errors, duration), with bounded labels and token protection |
+| 2026-11 | Structured JSON logs, request IDs, liveness and readiness endpoints, database connect timeout |
+| 2026-10 | Deployed a demo to Render's free tier |
 | 2026-10 | Adopted `uv` with a committed lock file; Dependabot now watches Python packages |
 | 2026-10 | Added GitHub Actions CI (lint, format check, migrations, tests on PostgreSQL) |
 | 2026-10 | Auth hardening: `Role` enum, timing-safe staff login, rate limits on token endpoints, all-session revocation on credential change, connection pool settings |
@@ -319,6 +492,8 @@ When a pull request changes behavior, update these sections in the same pull req
 - **Configuration**: every new or changed setting, with its default. Also update `.env.example`.
 - **Rate limiting**: new or changed limits.
 - **Database and migrations**: new tables or migration steps others must run.
+- **Observability**: new metrics, dashboard panels, alert rules or log fields.
+- **Deployment**: changes to hosting settings or environment variables.
 - **Known limitations** and **Roadmap**: remove what you finished, add what you learned.
 - **Change log**: one line for the change.
 

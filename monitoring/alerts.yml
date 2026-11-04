@@ -1,0 +1,69 @@
+groups:
+  - name: availability
+    rules:
+      - alert: AppDown
+        expr: up{job="resqgrid-render"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ResQGrid API is down"
+          description: >-
+            Prometheus could not scrape {{ $labels.instance }} for 2 minutes.
+            Check the Render service status and its logs first.
+
+  - name: symptoms
+    rules:
+      - alert: HighServerErrorRate
+        # Only real API routes count. Health checks and the root page are
+        # frequent and always succeed, so they would hide a failing API.
+        expr: |
+          (
+            sum(rate(http_requests_total{route=~"/api/.*", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{route=~"/api/.*"}[5m]))
+          ) > 0.05
+          and
+          sum(increase(http_requests_total{route=~"/api/.*"}[5m])) >= 20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of API requests are failing"
+          description: >-
+            {{ $value | humanizePercentage }} of API requests returned a 5xx
+            error over the last 5 minutes.
+
+      - alert: RepeatedServerErrors
+        # A percentage needs volume to mean anything, so HighServerErrorRate
+        # stays silent in quiet periods. A handful of 5xx errors in ten minutes
+        # is still worth a look when traffic is light.
+        expr: sum(increase(http_requests_total{route=~"/api/.*", status=~"5.."}[10m])) >= 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Several API requests failed recently"
+          description: >-
+            {{ $value | humanize }} API requests returned a 5xx error in the
+            last 10 minutes.
+
+      - alert: HighLatency
+        # Photo uploads are legitimately slow (they decode and re-encode
+        # images), so they are excluded here and get their own rule later.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{route=~"/api/.*", route!~".*/photos"}[5m])
+            )
+          ) > 2
+          and
+          sum(increase(http_requests_total{route=~"/api/.*", route!~".*/photos"}[5m])) >= 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API responses are slow"
+          description: >-
+            The slowest 5% of API requests take {{ $value | humanizeDuration }}
+            or longer (photo uploads excluded).

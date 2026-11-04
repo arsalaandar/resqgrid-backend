@@ -1,5 +1,11 @@
 global:
   scrape_interval: 15s
+  # How often rules are checked. The default is 1 minute, which would make
+  # testing slow.
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
   # The deployed app on Render.

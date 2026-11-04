@@ -32,6 +32,7 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/metrics_token:/etc/prometheus/metrics_token:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     extra_hosts:
       # Lets the container reach the app running on your computer.

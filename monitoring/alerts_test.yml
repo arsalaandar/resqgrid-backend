@@ -1,0 +1,188 @@
+rule_files:
+- alerts.yml
+evaluation_interval: 15s
+tests:
+- interval: 15s
+  input_series:
+  - series: up{job="resqgrid-render",instance="x.onrender.com"}
+    values: 1x8 0x72
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: AppDown
+    exp_alerts: []
+  - eval_time: 5m
+    alertname: AppDown
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: resqgrid-render
+        instance: x.onrender.com
+      exp_annotations:
+        summary: ResQGrid API is down
+        description: Prometheus could not scrape x.onrender.com for 2 minutes. Check the Render service status and its logs first.
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="200"}
+    values: 0+10x80
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="500"}
+    values: 0+4x80
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: HighServerErrorRate
+    exp_alerts: []
+  - eval_time: 12m
+    alertname: HighServerErrorRate
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+      exp_annotations:
+        summary: More than 5% of API requests are failing
+        description: 28.57% of API requests returned a 5xx error over the last 5 minutes.
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Several API requests failed recently
+        description: 160 API requests returned a 5xx error in the last 10 minutes.
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="200"}
+    values: 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 6 6 6 6 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 15 16 16 16 16 17 17 17 17 18 18 18 18 19
+      19 19 19
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="500"}
+    values: 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 6 6 6 6 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 15 16 16 16 16 17 17 17 17 18 18 18 18 19
+      19 19 19
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighServerErrorRate
+    exp_alerts: []
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Several API requests failed recently
+        description: 10.26 API requests returned a 5xx error in the last 10 minutes.
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="500"}
+    values: _x20 1 2 3 4 5 5x54
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts: []
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="500"}
+    values: 0x20 1 2 3 4 5 5x54
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: Several API requests failed recently
+        description: 5 API requests returned a 5xx error in the last 10 minutes.
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/health/ready",status="503"}
+    values: 0+10x80
+  - series: http_requests_total{method="GET",route="/health/ready",status="200"}
+    values: 0+1x80
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighServerErrorRate
+    exp_alerts: []
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts: []
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/me",status="401"}
+    values: 0+10x80
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighServerErrorRate
+    exp_alerts: []
+  - eval_time: 12m
+    alertname: RepeatedServerErrors
+    exp_alerts: []
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/incidents/options",status="200"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="1"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="2.5"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="5"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="+Inf"}
+    values: 0+10x80
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: HighLatency
+    exp_alerts: []
+  - eval_time: 12m
+    alertname: HighLatency
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        summary: API responses are slow
+        description: The slowest 5% of API requests take 4.875s or longer (photo uploads excluded).
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/incidents/{incident_id}/photos",status="201"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/{incident_id}/photos",le="1"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/{incident_id}/photos",le="2.5"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/{incident_id}/photos",le="5"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/{incident_id}/photos",le="+Inf"}
+    values: 0+10x80
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighLatency
+    exp_alerts: []
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/incidents/options",status="200"}
+    values: 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 6 6 6 6 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 15 16 16 16 16 17 17 17 17 18 18 18 18 19
+      19 19 19
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="1"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="2.5"}
+    values: '0x80'
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="5"}
+    values: 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 6 6 6 6 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 15 16 16 16 16 17 17 17 17 18 18 18 18 19
+      19 19 19
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="+Inf"}
+    values: 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 6 6 6 6 7 7 7 7 8 8 8 8 9 9 9 9 10 10 10 10 11 11 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 15 16 16 16 16 17 17 17 17 18 18 18 18 19
+      19 19 19
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighLatency
+    exp_alerts: []
+- interval: 15s
+  input_series:
+  - series: http_requests_total{method="GET",route="/api/v1/incidents/options",status="200"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="1"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="2.5"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="5"}
+    values: 0+10x80
+  - series: http_request_duration_seconds_bucket{method="GET",route="/api/v1/incidents/options",le="+Inf"}
+    values: 0+10x80
+  alert_rule_test:
+  - eval_time: 12m
+    alertname: HighLatency
+    exp_alerts: []

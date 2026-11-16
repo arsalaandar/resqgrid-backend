@@ -19,6 +19,44 @@ services:
       timeout: 5s
       retries: 5
 
+    # The API as a container, with fixed resource limits, for repeatable tests.
+  # Start it with: docker compose --profile app up -d --build
+  migrate:
+    build: .
+    image: resqgrid-api:local
+    profiles: ["app"]
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env
+    environment:
+      # Inside Docker the database is reached by service name, not 127.0.0.1.
+      DATABASE_URL: postgresql+psycopg://resqgrid:${POSTGRES_PASSWORD:-resqgrid_password}@postgres:5432/resqgrid
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    image: resqgrid-api:local
+    container_name: resqgrid-api
+    profiles: ["app"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://resqgrid:${POSTGRES_PASSWORD:-resqgrid_password}@postgres:5432/resqgrid
+      INCIDENT_PHOTO_STORAGE_DIR: /app/storage/incident_photos
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - photos_data:/app/storage
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
   # Monitoring stack. Start it with:
   #   docker compose --profile monitoring up -d
   # A plain "docker compose up -d" still starts only the database.
@@ -58,5 +96,6 @@ services:
 
 volumes:
   postgres_data:
+  photos_data:
   prometheus_data:
   grafana_data:

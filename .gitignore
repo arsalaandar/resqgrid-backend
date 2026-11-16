@@ -23,3 +23,9 @@ storage/
 .DS_Store
 Thumbs.db
 monitoring/metrics_token*
+
+# Load-test output
+loadtests/results/
+
+seeded.dump
+pg.log

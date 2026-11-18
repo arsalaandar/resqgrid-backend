@@ -4,14 +4,14 @@ version = "1.0.0"
 description = "Emergency incident reporting and response platform API"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi==0.162.5",
+    "fastapi==0.163.0",
     "uvicorn[standard]==0.54.0",
     "SQLAlchemy==2.1.6",
     "alembic==1.20.1",
     "psycopg[binary]==3.3.9",
     "PyJWT==2.15.1",
-    "pwdlib[argon2]==0.3.1",
-    "pydantic-settings==2.16.2",
+    "pwdlib[argon2]==0.4.0",
+    "pydantic-settings==2.16.3",
     "pillow==13.0.0",
     "python-multipart==0.0.33",
     "slowapi==0.1.10",

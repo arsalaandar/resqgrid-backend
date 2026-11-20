@@ -24,7 +24,13 @@ def main() -> None:
         match = DURATION.match(entry)
         if match:
             ms = float(match.group(1))
-            sql = " ".join(match.group(2).split())[:700]
+            sql = " ".join(match.group(2).split())
+            sql = re.sub(
+                r"^SELECT (?!count\().*? FROM ",
+                "SELECT <columns> FROM ",
+                sql,
+                count=1,
+            )[:700]
             row = stats[sql]
             row[0] += 1
             row[1] += ms

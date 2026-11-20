@@ -95,3 +95,19 @@ class Incident(Base):
             "created_at",
         ),
     )
+
+
+# Round 1 list indexes. Declared here so Alembic autogenerate knows about them;
+# created by migration f3a9c2d4b6e1 (built CONCURRENTLY there).
+Index(
+    "ix_incidents_created_at_id",
+    Incident.created_at.desc(),
+    Incident.id.desc(),
+)
+Index(
+    "ix_incidents_district_tehsil_created",
+    func.lower(Incident.district),
+    func.lower(Incident.tehsil),
+    Incident.created_at.desc(),
+    Incident.id.desc(),
+)

@@ -32,6 +32,13 @@ class Settings(BaseSettings):
 
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
+
+    # Requests handled at the same time; extra requests wait in a queue and get
+    # a 503 after REQUEST_QUEUE_TIMEOUT_SECONDS. Keep this at or below
+    # DB_POOL_SIZE + DB_MAX_OVERFLOW so requests never wait for each other's
+    # database connections. 0 turns the limit off.
+    MAX_CONCURRENT_REQUESTS: int = Field(default=25, ge=0)
+    REQUEST_QUEUE_TIMEOUT_SECONDS: float = Field(default=5.0, gt=0)
     # Prometheus metrics endpoint.
     METRICS_ENABLED: bool = True
     # Bearer token Prometheus must send to read /metrics. Required in staging
@@ -67,6 +74,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "JWT_SESSION_ABSOLUTE_EXPIRE_DAYS must be greater than or "
                 "equal to JWT_REFRESH_TOKEN_EXPIRE_DAYS."
+            )
+
+        pool_capacity = self.DB_POOL_SIZE + self.DB_MAX_OVERFLOW
+
+        if self.MAX_CONCURRENT_REQUESTS > pool_capacity:
+            raise ValueError(
+                "MAX_CONCURRENT_REQUESTS must not exceed DB_POOL_SIZE + "
+                "DB_MAX_OVERFLOW, or requests can wait for each other's "
+                "database connections."
             )
 
         if self.APP_ENV in ("staging", "production"):

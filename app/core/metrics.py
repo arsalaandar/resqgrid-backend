@@ -42,6 +42,17 @@ HTTP_REQUESTS_IN_PROGRESS = Gauge(
 )
 
 
+HTTP_REQUESTS_WAITING = Gauge(
+    "http_requests_waiting",
+    "Requests queued because too many were already being handled.",
+)
+
+HTTP_REQUESTS_SHED = Counter(
+    "http_requests_shed_total",
+    "Requests rejected with 503 after waiting too long in the queue.",
+)
+
+
 def method_label(method: str) -> str:
     return method if method in KNOWN_METHODS else "OTHER"
 

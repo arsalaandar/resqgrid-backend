@@ -111,6 +111,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 | `OTP_MAX_REQUESTS_PER_HOUR` / `_PER_DAY` | `5` / `10` | Per-phone OTP request caps |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | Use `redis://host:6379/0` in staging and production |
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | `10` / `20` | Connection pool sizing |
+| `MAX_CONCURRENT_REQUESTS` / `REQUEST_QUEUE_TIMEOUT_SECONDS` | `25` / `5` | Requests handled at once (keep at or below the pool size; `0` turns the limit off) and the seconds an extra request waits before getting a 503 |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
 | `LOG_FORMAT` | `json` | `json` for servers and log tools, `text` for reading logs in a terminal |
 | `METRICS_ENABLED` | `true` | Serve `/metrics`. When `false`, the endpoint does not exist |
@@ -271,6 +272,8 @@ Indexes on `incidents`: the primary key, `reporter_id`, `(status, created_at)`, 
 
 Connections come from a pool (`DB_POOL_SIZE` plus `DB_MAX_OVERFLOW`). Opening a connection gives up after 5 seconds, so a database outage fails requests quickly instead of hanging. Waiting for a free connection from a full pool uses SQLAlchemy's default timeout of 30 seconds.
 
+To stop requests waiting for each other's connections, the app handles at most `MAX_CONCURRENT_REQUESTS` requests at once (default 25, below the pool capacity of 30). Extra requests wait in a queue that uses no thread or connection, and get a 503 with `Retry-After` after `REQUEST_QUEUE_TIMEOUT_SECONDS`. Health checks and `/metrics` are never limited. Settings that put the limit above the pool capacity are rejected at startup.
+
 ## Observability
 
 Logs say what happened to one request, metrics say how the system is doing overall, and alerts say when to look.
@@ -298,6 +301,8 @@ Logs say what happened to one request, metrics say how the system is doing overa
 | `http_requests_total` | counter | `method`, `route`, `status` | Requests handled |
 | `http_request_duration_seconds` | histogram | `method`, `route` | Time to handle a request |
 | `http_requests_in_progress` | gauge | none | Requests being handled right now |
+| `http_requests_waiting` | gauge | none | Requests queued by the concurrency limit |
+| `http_requests_shed_total` | counter | none | Requests rejected with 503 after waiting too long |
 | `db_pool_capacity` | gauge | none | Pool size plus overflow |
 | `db_pool_connections_in_use` | gauge | none | Connections checked out right now |
 | `db_pool_connections_idle` | gauge | none | Open connections waiting in the pool |
@@ -491,11 +496,11 @@ A real production setup needs the items under [Roadmap](#roadmap): an SMS provid
 - **Metrics are per process.** With several Uvicorn workers each would report its own numbers. Prometheus multiprocess mode would be needed.
 - **Alerts are only a first version.** There is no Alertmanager, so nothing is delivered to a phone or inbox, and rules are evaluated only while Prometheus is running (currently on a developer machine). The first 5xx on a brand-new route/status series is not counted by the rate-based alerts, because Prometheus cannot see a counter go from 0 to 1 on a series it has just created.
 - **No log search.** Logs are structured but only viewed through the hosting platform or a terminal.
-- **Capacity is limited and only partly measured.** In the Round 0 load test (API container limited to 1 CPU and 512 MB, 10,209 users and 200,003 incidents) the API stayed healthy up to 150 simulated users and collapsed at 200, when the database connection pool ran dry (`QueuePool limit of size 10 overflow 20 reached`). Details are in `loadtests/round0-baseline.md`. The alert thresholds are still provisional.
+- **Capacity is limited and only partly measured.** In the Round 0 load test (API container limited to 1 CPU and 512 MB, 10,209 users and 200,003 incidents) the API stayed healthy up to 150 simulated users and collapsed at 200, when the database connection pool ran dry (`QueuePool limit of size 10 overflow 20 reached`). The Round 1 list indexes moved the collapse to 300 users, but it was still a sudden collapse, not a gradual slowdown. Details are in `loadtests/round0-baseline.md`. The alert thresholds are still provisional.
 
 ## Roadmap
 
-1. Load testing and capacity planning (in progress): the seeding script, Locust scenarios, a resource-limited container, a Round 0 baseline and list indexes are done. Next: the collapse near 200 users, then workers and caching, one change per round.
+1. Load testing and capacity planning (in progress): the seeding script, Locust scenarios, a resource-limited container, a Round 0 baseline and list indexes are done. Round 2 adds a limit on concurrent requests (see [Database and migrations](#database-and-migrations)). Next: re-measure the collapse, then workers and caching, one change per round.
 2. Append-only audit log for logins, account changes, status changes and admin data access.
 3. Incident status workflow with per-role transitions.
 4. Object storage for photos with authorized, short-lived download links.
@@ -511,7 +516,8 @@ Newest first. Add a line for every merged feature or fix.
 
 | Date | Change |
 |---|---|
-| 2026-11 | Round 1 of load testing: list indexes on `incidents` (`created_at, id` and `lower(district), lower(tehsil), created_at, id`), built concurrently by migration `f3a9c2d4b6e1` |
+| 2026-11 | Round 2 of load testing: a limit on concurrent requests (`MAX_CONCURRENT_REQUESTS`) with a wait queue and a 503 when overloaded, plus the `http_requests_waiting` and `http_requests_shed_total` metrics |
+| 2026-11 | Round 1 of load testing: list indexes on `incidents` (`created_at, id` and `lower(district), lower(tehsil), created_at, id`), built concurrently by migration `f3a9c2d4b6e1`; the last healthy level rose from 150 to 250 simulated users |
 | 2026-11 | Load-testing tooling: Locust scenarios, stepped stress shape, seeding script, slow-query digest and a Round 0 baseline |
 | 2026-11 | Dockerfile for the API and a Docker Compose `app` profile (migrations, then the API limited to 1 CPU and 512 MB) |
 | 2026-11 | Prometheus alert rules (`AppDown`, `HighServerErrorRate`, `RepeatedServerErrors`, `HighLatency`) with `promtool` unit tests |

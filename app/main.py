@@ -18,6 +18,7 @@ from app.api.routes.me import router as me_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.staff_auth import router as staff_auth_router
 from app.api.routes.token import router as token_router
+from app.core.concurrency import ConcurrencyLimitMiddleware
 from app.core.config import settings
 from app.core.logging_config import configure_logging
 from app.core.middleware import RequestContextMiddleware
@@ -35,6 +36,15 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Added before RequestContextMiddleware, which therefore wraps it: a request
+# rejected by the limit still gets a request ID, a log line and metrics.
+if settings.MAX_CONCURRENT_REQUESTS > 0:
+    app.add_middleware(
+        ConcurrencyLimitMiddleware,
+        max_concurrent=settings.MAX_CONCURRENT_REQUESTS,
+        queue_timeout=settings.REQUEST_QUEUE_TIMEOUT_SECONDS,
+        exempt_paths={"/health/live", "/health/ready", "/metrics"},
+    )
 app.add_middleware(RequestContextMiddleware)
 # Register SlowAPI with the FastAPI application.
 app.state.limiter = limiter

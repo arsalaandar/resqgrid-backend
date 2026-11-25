@@ -75,3 +75,5 @@ ignored while users arrive.
 | Round | Change | Last healthy level (users) | Mean at 150 users (ms) | Notes |
 |---|---|---:|---:|---|
 | 0 | None (baseline) | 150 | 28 | Collapse during the 200-user step |
+| 1 | List indexes on incidents: (created_at, id) and (lower(district), lower(tehsil), created_at, id) | 250 | 9 | Collapse moved to the 300-user step; still a cliff |
+| 2 | Limit concurrent requests to 25 (queue, 503 after 5 s) | 200 (fast); 0% failures up to 800 | 28 | No collapse. Throughput flat at about 200 to 210 requests/s from 250 users; mean latency rises with users (194 ms at 250, 1,441 ms at 500, 2,970 ms at 800). 150-user mean is higher than Round 1 (9 ms), probably noise from no warm-up; on/off check pending |

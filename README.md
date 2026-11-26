@@ -550,4 +550,4 @@ When a pull request changes behavior, update these sections in the same pull req
 - **Known limitations** and **Roadmap**: remove what you finished, add what you learned.
 - **Change log**: one line for the change.
 
-Keep claims accurate. Describe only what the code does today, and move anything planned to the Roadmap.
+A write-up of the three rounds, with the evidence and the results, is in [docs/performance-case-study.md](docs/performance-case-study.md).
